@@ -1,0 +1,5 @@
+# Este archivo desactiva todas las GitHub Actions
+# Solo usamos Vercel para deployment
+name: Disabled
+on: []
+jobs: {}
