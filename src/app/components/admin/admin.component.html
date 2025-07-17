@@ -1,0 +1,181 @@
+<div class="container">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-cog"></i> Panel de Administración</h2>
+    <button class="btn btn-danger" (click)="logout()" [disabled]="isLoading">
+      <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+    </button>
+  </div>
+
+  <!-- Controles de Sorteo -->
+  <div class="row mb-4">
+    <div *ngFor="let sorteo of sorteos" class="col-md-4 mb-3">
+      <div class="card sorteo-card">
+        <div class="card-header">
+          <h4><i class="fas fa-dice"></i> {{ sorteo.label }}</h4>
+          <p class="mb-0">Cierra: {{ sorteo.closeTime }}</p>
+          <span class="badge" [class.badge-success]="isSorteoOpen(sorteo)" [class.badge-danger]="!isSorteoOpen(sorteo)">
+            {{ isSorteoOpen(sorteo) ? 'Abierto' : 'Cerrado' }}
+          </span>
+        </div>
+        
+        <div class="card-body">
+          <div *ngIf="getSorteoData(sorteo)?.numeroGanador; else setWinner">
+            <div class="winner-display">
+              <h3><i class="fas fa-trophy"></i> Ganador: {{ getSorteoData(sorteo)?.numeroGanador }}</h3>
+              <p>Factor: {{ getSorteoData(sorteo)?.factorMultiplicador || 70 }}</p>
+              <div class="results">
+                <div class="result-item">
+                  <strong>Vendido:</strong> L. {{ getSorteoData(sorteo)?.totalVendido?.toFixed(2) || '0.00' }}
+                </div>
+                <div class="result-item">
+                  <strong>Pagado:</strong> L. {{ getSorteoData(sorteo)?.totalPagado?.toFixed(2) || '0.00' }}
+                </div>
+                <div class="result-item" [class.text-success]="(getSorteoData(sorteo)?.gananciaNeta || 0) > 0" 
+                     [class.text-danger]="(getSorteoData(sorteo)?.gananciaNeta || 0) < 0">
+                  <strong>Ganancia:</strong> L. {{ getSorteoData(sorteo)?.gananciaNeta?.toFixed(2) || '0.00' }}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <ng-template #setWinner>
+            <div *ngIf="!isSorteoOpen(sorteo)" class="winner-form">
+              <div class="form-group">
+                <label><i class="fas fa-hashtag"></i> Número Ganador:</label>
+                <input type="number" class="form-control" min="1" max="99" 
+                       [(ngModel)]="winningNumbers[sorteo.name]" [disabled]="isLoading">
+              </div>
+              <div class="form-group">
+                <label><i class="fas fa-calculator"></i> Factor Multiplicador:</label>
+                <input type="number" class="form-control" min="1" max="100" step="0.1" 
+                       [(ngModel)]="factorMultiplicador[sorteo.name]" 
+                       [value]="factorMultiplicador[sorteo.name] || 70" [disabled]="isLoading">
+              </div>
+              <button class="btn btn-success btn-block" (click)="setWinningNumber(sorteo)" 
+                      [disabled]="!winningNumbers[sorteo.name] || isLoading">
+                <i class="fas fa-check"></i> Establecer Ganador
+              </button>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h4><i class="fas fa-filter"></i> Filtros</h4>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-4">
+          <label><i class="fas fa-calendar"></i> Fecha:</label>
+          <input type="date" class="form-control" [(ngModel)]="selectedDate" 
+                 (change)="onDateChange()" [disabled]="isLoading">
+        </div>
+        <div class="col-md-4">
+          <label><i class="fas fa-filter"></i> Sorteo:</label>
+          <select class="form-control" [(ngModel)]="selectedSorteoFilter" 
+                  (change)="onSorteoFilterChange()" [disabled]="isLoading">
+            <option value="">Todos los sorteos</option>
+            <option *ngFor="let sorteo of sorteos" [value]="sorteo.name">
+              {{ sorteo.label }}
+            </option>
+          </select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <button class="btn btn-primary" (click)="generateDailyReport()" [disabled]="isLoading">
+            <i class="fas fa-file-pdf"></i> Generar Reporte
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ventas -->
+  <div class="card">
+    <div class="card-header">
+      <h4><i class="fas fa-chart-line"></i> Ventas</h4>
+      <div class="total-display">
+        <strong>Total: L. {{ getTotalSales().toFixed(2) }}</strong>
+      </div>
+    </div>
+    <div class="card-body">
+      <div *ngIf="isLoading" class="text-center">
+        <div class="spinner-border" role="status">
+          <span class="sr-only">Cargando...</span>
+        </div>
+      </div>
+      
+      <div *ngIf="!isLoading && sales.length > 0; else noSales">
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th><i class="fas fa-store"></i> Sucursal</th>
+                <th><i class="fas fa-dice"></i> Sorteo</th>
+                <th><i class="fas fa-clock"></i> Fecha</th>
+                <th><i class="fas fa-dollar-sign"></i> Total</th>
+                <th><i class="fas fa-list-ol"></i> Números</th>
+                <th><i class="fas fa-print"></i> Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let sale of sales">
+                <td>{{ sale.sucursal }}</td>
+                <td>
+                  <span class="badge badge-primary">{{ sale.sorteo | uppercase }}</span>
+                </td>
+                <td>{{ sale.fecha | date:'medium' }}</td>
+                <td class="text-success">
+                  <strong>L. {{ sale.total.toFixed(2) }}</strong>
+                </td>
+                <td>
+                  <div class="numbers-display">
+                    <span *ngFor="let detail of getSaleDetails(sale.id)" 
+                          class="badge badge-info mr-1 mb-1">
+                      Nº {{ detail.numero.toString().padStart(2, '0') }}: L. {{ detail.monto.toFixed(2) }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary" 
+                          (click)="printService.generateThermalReceipt(sale, getSaleDetails(sale.id))">
+                    <i class="fas fa-print"></i> Reimprimir
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <ng-template #noSales>
+        <div class="alert alert-info" *ngIf="!isLoading">
+          <i class="fas fa-info-circle"></i> No hay ventas registradas para los filtros seleccionados.
+        </div>
+      </ng-template>
+    </div>
+  </div>
+
+  <!-- Resumen por Sucursal -->
+  <div class="card mt-4">
+    <div class="card-header">
+      <h4><i class="fas fa-chart-bar"></i> Resumen por Sucursal</h4>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div *ngFor="let sucursal of getSucursalSummary()" class="col-md-3 mb-3">
+          <div class="card sucursal-summary">
+            <div class="card-body text-center">
+              <h5>{{ sucursal.name }}</h5>
+              <h3 class="text-success">L. {{ sucursal.total.toFixed(2) }}</h3>
+              <p class="text-muted">{{ sucursal.count }} ventas</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
