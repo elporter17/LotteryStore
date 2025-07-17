@@ -12,6 +12,8 @@ export class SupabaseService {
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 
+
+
   constructor() {
     this.supabase = createClient(environment.supabase.url, environment.supabase.key);
     
@@ -264,26 +266,58 @@ export class SupabaseService {
 
   async createSaleDetail(detail: Omit<SaleDetail, 'id'>): Promise<string> {
     try {
+      console.log('=== DEBUG createSaleDetail ===');
+      console.log('Detalle original recibido:', detail);
+      console.log('Número original:', detail.numero, 'Tipo:', typeof detail.numero);
+      console.log('Monto original:', detail.monto, 'Tipo:', typeof detail.monto);
+      
+      // Validar que los datos sean válidos
+      if (detail.numero === null || detail.numero === undefined) {
+        throw new Error('Número no puede ser null o undefined');
+      }
+      
+      if (detail.monto === null || detail.monto === undefined || detail.monto <= 0) {
+        throw new Error('Monto debe ser mayor a 0');
+      }
+      
+      // Convertir el número a string con formato de 2 dígitos (00, 01, 02, etc.)
+      const numeroString = detail.numero.toString().padStart(2, '0');
+      console.log('Número como string para BD:', numeroString);
+      
       const detailData = {
         sale_id: detail.saleId,
-        numero: detail.numero,
-        monto: detail.monto
+        numero: numeroString,  // Enviar como string
+        monto: Number(detail.monto)
       };
+
+      console.log('Datos finales que se enviarán a la BD:', detailData);
+      console.log('Tipos de datos:', {
+        sale_id: typeof detailData.sale_id,
+        numero: typeof detailData.numero,
+        monto: typeof detailData.monto
+      });
 
       const { data, error } = await this.supabase
         .from('sale_details')
         .insert([detailData])
         .select()
         .single();
+      
+      if (error) {
+        console.error('Error de Supabase:', error);
+        console.error('Detalles del error:', JSON.stringify(error, null, 2));
+        throw error;
+      }
 
-      if (error) throw error;
-
+      console.log('Detalle creado exitosamente:', data);
       return data.id;
     } catch (error) {
       console.error('Error creando detalle de venta:', error);
       throw error;
     }
   }
+
+
 
   async getSalesByDateAndSorteo(fecha: Date, sorteo: string): Promise<Sale[]> {
     try {
@@ -334,7 +368,7 @@ export class SupabaseService {
       return data.map(detail => ({
         id: detail.id,
         saleId: detail.sale_id,
-        numero: detail.numero,
+        numero: parseInt(detail.numero), // Convertir string a número para la interfaz
         monto: detail.monto
       })) as SaleDetail[];
     } catch (error) {
@@ -347,12 +381,16 @@ export class SupabaseService {
   async createOrUpdateSorteo(sorteo: Omit<Sorteo, 'id'>): Promise<string> {
     try {
       const sorteoId = `${sorteo.fecha.toDateString()}-${sorteo.sorteo}`;
+      
+      // Convertir el número ganador a string con formato de 2 dígitos
+      const numeroGanadorString = (sorteo.numeroGanador ?? 0).toString().padStart(2, '0');
+      
       const sorteoData = {
         id: sorteoId,
         fecha: sorteo.fecha.toISOString(),
         sorteo: sorteo.sorteo,
         hora_cierre: sorteo.horaCierre.toISOString(),
-        numero_ganador: sorteo.numeroGanador,
+        numero_ganador: numeroGanadorString,
         factor_multiplicador: sorteo.factorMultiplicador,
         total_vendido: sorteo.totalVendido,
         total_pagado: sorteo.totalPagado,
@@ -397,7 +435,8 @@ export class SupabaseService {
         fecha: new Date(data.fecha),
         sorteo: data.sorteo,
         horaCierre: new Date(data.hora_cierre),
-        numeroGanador: data.numero_ganador,
+        // Convertir string a número para la interfaz
+        numeroGanador: parseInt(data.numero_ganador) || 0,
         factorMultiplicador: data.factor_multiplicador,
         totalVendido: data.total_vendido,
         totalPagado: data.total_pagado,
@@ -412,10 +451,13 @@ export class SupabaseService {
 
   async updateSorteoWinner(sorteoId: string, numeroGanador: number, factorMultiplicador: number): Promise<void> {
     try {
+      // Convertir el número a string con formato de 2 dígitos
+      const numeroString = numeroGanador.toString().padStart(2, '0');
+      
       const { error } = await this.supabase
         .from('sorteos')
         .update({
-          numero_ganador: numeroGanador,
+          numero_ganador: numeroString,
           factor_multiplicador: factorMultiplicador,
           cerrado: true
         })
@@ -458,7 +500,7 @@ export class SupabaseService {
         for (const detail of sale.sale_details) {
           totalVendido += detail.monto;
           
-          // Si el número coincide con el ganador, calcular ganancia
+          // Comparar números como strings (ambos deberían estar en formato "00", "01", etc.)
           if (detail.numero === sorteo.numero_ganador) {
             totalPagado += detail.monto * sorteo.factor_multiplicador;
           }

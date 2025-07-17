@@ -291,3 +291,538 @@
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Estilos para el teclado numérico */
+.numeric-keypad {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.keypad-display {
+  background: #ffffff;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: #007bff;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.keypad-btn {
+  height: 60px;
+  font-size: 24px;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  background: #007bff;
+  color: white;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.keypad-btn:hover {
+  background: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.keypad-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.keypad-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.keypad-clear {
+  background: #dc3545;
+}
+
+.keypad-clear:hover {
+  background: #c82333;
+}
+
+.keypad-ok {
+  background: #28a745;
+}
+
+.keypad-ok:hover {
+  background: #218838;
+}
+
+/* Estilos para números seleccionados */
+.selected-numbers-container {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+}
+
+.selected-number-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 10px 15px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+
+.selected-number-item:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.number-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.number-badge {
+  background: #007bff;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 16px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.amount-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #28a745;
+}
+
+.delete-btn {
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.total-section {
+  border-top: 2px solid #dee2e6;
+  padding-top: 15px;
+}
+
+.total-display {
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 18px;
+  color: #28a745;
+}
+
+/* Estilos para historial de ventas */
+.sales-history-container {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.sale-item {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  transition: all 0.2s;
+}
+
+.sale-item:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
+}
+
+.sale-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sale-time {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.sale-total {
+  color: #28a745;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.sale-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.number-badge-small {
+  background: #6f42c1;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* Alertas de bloqueo */
+.blocked-alert {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 20px 0;
+  text-align: center;
+  color: #856404;
+}
+
+.blocked-alert .fas {
+  margin-right: 8px;
+  color: #f39c12;
+}
+
+/* Estilos para modales de calculadora */
+.modal {
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1050;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.modal.show {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-dialog {
+  position: relative;
+  margin: auto;
+  pointer-events: auto;
+  z-index: 1055;
+}
+
+.modal-content {
+  position: relative;
+  background: white;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border: none;
+}
+
+.modal-header {
+  border-bottom: 2px solid #dee2e6;
+  background: #f8f9fa;
+  border-radius: 15px 15px 0 0;
+  padding: 20px;
+}
+
+.modal-title {
+  font-size: 24px;
+  font-weight: bold;
+  color: #343a40;
+  margin-right: 40px; // Espacio para la X
+}
+
+.modal-header {
+  position: relative;
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 28px;
+  font-weight: bold;
+  color: #6c757d;
+  border: none;
+  background: none;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1055;
+}
+
+.close:hover {
+  color: #343a40;
+}
+
+.modal-body {
+  padding: 30px;
+}
+
+.calculator-container {
+  max-width: 300px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.calculator-display {
+  background: #f8f9fa;
+  border: 3px solid #343a40;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.display-label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #6c757d;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.display-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #343a40;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calculator-keypad {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keypad-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.keypad-btn {
+  width: 80px;
+  height: 60px;
+  font-size: 24px;
+  font-weight: bold;
+  border: 2px solid #007bff;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #007bff;
+  cursor: pointer;
+  transition: all 0.1s ease; // Más rápido
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  user-select: none;
+}
+
+.keypad-btn:hover:not(:disabled) {
+  background: #007bff;
+  color: white;
+  transform: translateY(-1px); // Menor desplazamiento
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.keypad-btn:active:not(:disabled) {
+  transform: scale(0.95); // Efecto de presión
+  background: #0056b3;
+  transition: transform 0.05s ease;
+}
+
+.keypad-btn:disabled {
+  background: #e9ecef;
+  color: #6c757d;
+  border-color: #dee2e6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.keypad-clear {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: white;
+}
+
+.keypad-clear:hover {
+  background: #c82333;
+  border-color: #bd2130;
+}
+
+.keypad-accept {
+  background: #28a745;
+  border-color: #28a745;
+  color: white;
+  font-size: 16px;
+}
+
+.keypad-accept:hover {
+  background: #218838;
+  border-color: #1e7e34;
+}
+
+/* Modal de confirmación */
+.confirmation-container {
+  text-align: center;
+  padding: 30px 20px;
+}
+
+.confirmation-card {
+  background: #f8f9fa;
+  border: 3px solid #28a745;
+  border-radius: 15px;
+  padding: 30px;
+  margin: 0 auto;
+  max-width: 300px;
+}
+
+.number-display-large {
+  font-size: 48px;
+  font-weight: bold;
+  color: #007bff;
+  margin-bottom: 20px;
+  background: white;
+  border: 2px solid #007bff;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.amount-display {
+  font-size: 24px;
+  font-weight: bold;
+  color: #28a745;
+  margin-bottom: 30px;
+  background: white;
+  border: 2px solid #28a745;
+  border-radius: 10px;
+  padding: 15px;
+}
+
+.confirmation-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.confirmation-buttons .btn {
+  padding: 15px 30px;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 10px;
+}
+
+/* Backdrop personalizado */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1040;
+  opacity: 0;
+  transition: opacity 0.15s linear;
+}
+
+.modal-backdrop.show {
+  opacity: 1;
+}
+
+/* Fix para clickeable */
+.modal-dialog {
+  pointer-events: auto;
+}
+
+.modal {
+  pointer-events: none;
+}
+
+.modal.show {
+  pointer-events: auto;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+  
+  .col-md-4,
+  .col-md-6 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  .d-flex {
+    flex-direction: column;
+    gap: 10px;
+    
+    &.justify-content-between {
+      align-items: stretch;
+    }
+  }
+  
+  .text-right {
+    text-align: left;
+  }
+  
+  .calculator-container {
+    padding: 10px;
+  }
+  
+  .keypad-btn {
+    width: 70px;
+    height: 50px;
+    font-size: 20px;
+  }
+  
+  .display-value {
+    font-size: 28px;
+  }
+  
+  .number-display-large {
+    font-size: 40px;
+    padding: 15px;
+  }
+  
+  .amount-display {
+    font-size: 20px;
+    padding: 12px;
+  }
+}

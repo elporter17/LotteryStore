@@ -6,6 +6,106 @@
     </button>
   </div>
 
+  <!-- Cards de Resumen General -->
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card summary-card bg-primary text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h6 class="card-title"><i class="fas fa-money-bill-wave"></i> Total Vendido</h6>
+              <h4>L. {{ getTotalVendido().toFixed(2) }}</h4>
+            </div>
+            <div class="card-icon">
+              <i class="fas fa-chart-line fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+      <div class="card summary-card bg-warning text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h6 class="card-title"><i class="fas fa-trophy"></i> Total Pagado</h6>
+              <h4>L. {{ getTotalPagado().toFixed(2) }}</h4>
+            </div>
+            <div class="card-icon">
+              <i class="fas fa-coins fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+      <div class="card summary-card" [class.bg-success]="getGananciaNeta() > 0" [class.bg-danger]="getGananciaNeta() < 0" class="text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h6 class="card-title"><i class="fas fa-chart-pie"></i> Ganancia Neta</h6>
+              <h4>L. {{ getGananciaNeta().toFixed(2) }}</h4>
+            </div>
+            <div class="card-icon">
+              <i class="fas fa-piggy-bank fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+      <div class="card summary-card bg-info text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h6 class="card-title"><i class="fas fa-ticket-alt"></i> Ventas Totales</h6>
+              <h4>{{ getTotalVentas() }}</h4>
+            </div>
+            <div class="card-icon">
+              <i class="fas fa-shopping-cart fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtro de Fechas -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">
+          <h5><i class="fas fa-filter"></i> Filtros de Fecha</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="fechaDesde"><i class="fas fa-calendar-alt"></i> Fecha Desde:</label>
+              <input type="date" id="fechaDesde" class="form-control" 
+                     [(ngModel)]="fechaDesde" (change)="onFiltroFechaChange()">
+            </div>
+            <div class="col-md-4">
+              <label for="fechaHasta"><i class="fas fa-calendar-alt"></i> Fecha Hasta:</label>
+              <input type="date" id="fechaHasta" class="form-control" 
+                     [(ngModel)]="fechaHasta" (change)="onFiltroFechaChange()">
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button class="btn btn-primary me-2" (click)="aplicarFiltros()">
+                <i class="fas fa-search"></i> Aplicar Filtros
+              </button>
+              <button class="btn btn-secondary" (click)="limpiarFiltros()">
+                <i class="fas fa-eraser"></i> Limpiar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Controles de Sorteo -->
   <div class="row mb-4">
     <div *ngFor="let sorteo of sorteos" class="col-md-4 mb-3">
@@ -93,7 +193,56 @@
     </div>
   </div>
 
-  <!-- Ventas -->
+  <!-- Gestión de Usuarios -->
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h4><i class="fas fa-users"></i> Gestión de Usuarios</h4>
+      <button class="btn btn-success" (click)="showUserModal = true">
+        <i class="fas fa-plus"></i> Nuevo Usuario
+      </button>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th><i class="fas fa-envelope"></i> Email</th>
+              <th><i class="fas fa-user-tag"></i> Rol</th>
+              <th><i class="fas fa-store"></i> Sucursal</th>
+              <th><i class="fas fa-toggle-on"></i> Estado</th>
+              <th><i class="fas fa-cogs"></i> Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let user of users">
+              <td>{{ user.email }}</td>
+              <td>
+                <span class="badge" [class.badge-success]="user.role === 'admin'" [class.badge-primary]="user.role === 'sucursal'">
+                  {{ user.role | titlecase }}
+                </span>
+              </td>
+              <td>{{ user.sucursal || 'N/A' }}</td>
+              <td>
+                <span class="badge" [class.badge-success]="user.active" [class.badge-danger]="!user.active">
+                  {{ user.active ? 'Activo' : 'Inactivo' }}
+                </span>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary me-1" (click)="editUser(user)">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" (click)="deleteUser(user.id)">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ventas con Scroll -->
   <div class="card">
     <div class="card-header">
       <h4><i class="fas fa-chart-line"></i> Ventas</h4>
@@ -108,7 +257,7 @@
         </div>
       </div>
       
-      <div *ngIf="!isLoading && sales.length > 0; else noSales">
+      <div *ngIf="!isLoading && sales.length > 0; else noSales" class="sales-container">
         <div class="table-responsive">
           <table class="table table-striped">
             <thead>
@@ -141,7 +290,7 @@
                 </td>
                 <td>
                   <button class="btn btn-sm btn-outline-primary" 
-                          (click)="printService.generateThermalReceipt(sale, getSaleDetails(sale.id))">
+                          (click)="reprintReceipt(sale)">
                     <i class="fas fa-print"></i> Reimprimir
                   </button>
                 </td>
@@ -179,3 +328,69 @@
     </div>
   </div>
 </div>
+
+<!-- Modal de Usuario -->
+<div class="modal fade" [class.show]="showUserModal" [style.display]="showUserModal ? 'block' : 'none'" 
+     tabindex="-1" role="dialog" *ngIf="showUserModal">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-user-plus"></i> {{ editingUser ? 'Editar Usuario' : 'Nuevo Usuario' }}
+        </h5>
+        <button type="button" class="btn-close" (click)="closeUserModal()"></button>
+      </div>
+      <div class="modal-body">
+        <form #userForm="ngForm">
+          <div class="form-group mb-3">
+            <label for="userEmail"><i class="fas fa-envelope"></i> Email:</label>
+            <input type="email" id="userEmail" class="form-control" 
+                   [(ngModel)]="userFormData.email" name="email" required>
+          </div>
+          
+          <div class="form-group mb-3" *ngIf="!editingUser">
+            <label for="userPassword"><i class="fas fa-lock"></i> Contraseña:</label>
+            <input type="password" id="userPassword" class="form-control" 
+                   [(ngModel)]="userFormData.password" name="password" required>
+          </div>
+          
+          <div class="form-group mb-3">
+            <label for="userRole"><i class="fas fa-user-tag"></i> Rol:</label>
+            <select id="userRole" class="form-control" 
+                    [(ngModel)]="userFormData.role" name="role" required>
+              <option value="sucursal">Sucursal</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          
+          <div class="form-group mb-3" *ngIf="userFormData.role === 'sucursal'">
+            <label for="userSucursal"><i class="fas fa-store"></i> Sucursal:</label>
+            <input type="text" id="userSucursal" class="form-control" 
+                   [(ngModel)]="userFormData.sucursal" name="sucursal" 
+                   placeholder="Nombre de la sucursal">
+          </div>
+          
+          <div class="form-group mb-3">
+            <div class="form-check">
+              <input type="checkbox" id="userActive" class="form-check-input" 
+                     [(ngModel)]="userFormData.active" name="active">
+              <label for="userActive" class="form-check-label">
+                <i class="fas fa-toggle-on"></i> Usuario Activo
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeUserModal()">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+        <button type="button" class="btn btn-primary" (click)="saveUser()" 
+                [disabled]="!userForm.valid || isLoading">
+          <i class="fas fa-save"></i> {{ editingUser ? 'Actualizar' : 'Crear' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop fade" [class.show]="showUserModal" *ngIf="showUserModal"></div>

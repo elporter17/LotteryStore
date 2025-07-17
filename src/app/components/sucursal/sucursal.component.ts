@@ -21,11 +21,31 @@ export class SucursalComponent implements OnInit {
   selectedAmount: number | null = null;
   selectedNumbers: { numero: number, monto: number }[] = [];
   
+  // Propiedades para entrada individual
+  numero: number | null = null;
+  monto: number | null = null;
+  
   todaySales: Sale[] = [];
+  recentSales: Sale[] = [];
   saleDetails: { [saleId: string]: SaleDetail[] } = {};
   filteredSales: Sale[] = [];
   filterDate: string = '';
   isLoading: boolean = false;
+
+  // Propiedades para el teclado numérico
+  numberInput: string = '';
+  showKeypad: boolean = false;
+  isBlocked: boolean = false;
+  currentInput: 'numero' | 'monto' = 'numero';
+
+  // Propiedades para el flujo de modales
+  showNumberModal: boolean = false;
+  showAmountModal: boolean = false;
+  showConfirmModal: boolean = false;
+  tempNumber: number | null = null;
+  tempAmount: number | null = null;
+  modalNumberInput: string = '';
+  modalAmountInput: string = '';
 
   constructor(
     private supabaseService: SupabaseService,
@@ -44,6 +64,12 @@ export class SucursalComponent implements OnInit {
     });
 
     this.initializeComponent();
+    this.checkTimeRestrictions();
+    
+    // Verificar bloqueo cada minuto
+    setInterval(() => {
+      this.checkTimeRestrictions();
+    }, 60000);
   }
 
   private async initializeComponent(): Promise<void> {
@@ -53,6 +79,7 @@ export class SucursalComponent implements OnInit {
 
       await this.updateSorteoInfo();
       await this.loadTodaySales();
+      await this.loadRecentSales();
       this.setFilterDate();
       
       // Actualizar cada minuto
@@ -104,24 +131,27 @@ export class SucursalComponent implements OnInit {
   }
 
   addNumber(): void {
-    if (this.selectedNumber && this.selectedAmount && 
-        this.selectedNumber >= 1 && this.selectedNumber <= 99) {
+    if (this.numero && this.monto && 
+        this.numero >= 0 && this.numero <= 99) {
       
       // Verificar si el número ya fue seleccionado
-      const existingIndex = this.selectedNumbers.findIndex(n => n.numero === this.selectedNumber);
+      const existingIndex = this.selectedNumbers.findIndex(n => n.numero === this.numero);
       if (existingIndex >= 0) {
         // Actualizar monto
-        this.selectedNumbers[existingIndex].monto += this.selectedAmount!;
+        this.selectedNumbers[existingIndex].monto += this.monto!;
       } else {
         // Agregar nuevo número
         this.selectedNumbers.push({
-          numero: this.selectedNumber,
-          monto: this.selectedAmount
+          numero: this.numero,
+          monto: this.monto
         });
       }
       
-      this.selectedNumber = null;
-      this.selectedAmount = null;
+      this.numero = null;
+      this.monto = null;
+      this.numberInput = '';
+      this.currentInput = 'numero';
+      this.notificationService.showSuccess('Número agregado', 'Número agregado exitosamente a la venta');
     }
   }
 
@@ -200,6 +230,23 @@ export class SucursalComponent implements OnInit {
 
       // Generar e imprimir recibo
       const saleWithId = { ...sale, id: saleId };
+      console.log('Imprimiendo recibo para venta:', saleWithId);
+      console.log('Detalles para imprimir:', saleDetails);
+      
+      // Asegurar que los detalles tengan datos
+      if (saleDetails.length === 0) {
+        console.warn('No hay detalles de venta, usando selectedNumbers como fallback');
+        // Usar selectedNumbers como fallback
+        for (const item of this.selectedNumbers) {
+          saleDetails.push({
+            id: `temp-${Date.now()}-${item.numero}`,
+            saleId,
+            numero: item.numero,
+            monto: item.monto
+          });
+        }
+      }
+      
       this.printService.generateThermalReceipt(saleWithId, saleDetails);
 
       // Limpiar selección
@@ -271,6 +318,277 @@ export class SucursalComponent implements OnInit {
       } finally {
         this.notificationService.hideLoading();
       }
+    }
+  }
+
+  // Métodos del teclado numérico
+  pressNumber(num: number) {
+    if (this.isBlocked) {
+      this.notificationService.showError('Ventas bloqueadas', 'No se pueden realizar ventas en los últimos 5 minutos antes del sorteo');
+      return;
+    }
+
+    if (this.numberInput.length < 5) { // Máximo 5 dígitos
+      this.numberInput += num.toString();
+    }
+  }
+
+  clearNumber() {
+    this.numberInput = '';
+  }
+
+  acceptNumber() {
+    if (!this.numberInput) return;
+
+    if (this.currentInput === 'numero') {
+      const numero = parseInt(this.numberInput);
+      if (numero >= 0 && numero <= 99) {
+        this.numero = numero;
+        this.numberInput = '';
+        this.currentInput = 'monto';
+        this.notificationService.showInfo('Número seleccionado', 'Ahora ingresa el monto a apostar');
+      } else {
+        this.notificationService.showError('Número inválido', 'El número debe estar entre 00 y 99');
+      }
+    } else {
+      const monto = parseFloat(this.numberInput);
+      if (monto > 0 && monto <= 500) {
+        this.monto = monto;
+        this.addNumber();
+        this.numberInput = '';
+        this.currentInput = 'numero';
+      } else {
+        this.notificationService.showError('Monto inválido', 'El monto debe ser mayor a 0 y menor o igual a L. 500');
+      }
+    }
+  }
+
+  // Flujo de modales para selección de números
+  openNumberModal(): void {
+    console.log('Abriendo modal de número');
+    if (this.isBlocked) {
+      this.notificationService.showError('Ventas bloqueadas', 'No se pueden realizar ventas en los últimos 5 minutos antes del sorteo');
+      return;
+    }
+    this.showNumberModal = true;
+    this.modalNumberInput = '';
+    console.log('Modal abierto:', this.showNumberModal);
+  }
+
+  closeAllModals(): void {
+    console.log('Cerrando todos los modales');
+    this.showNumberModal = false;
+    this.showAmountModal = false;
+    this.showConfirmModal = false;
+    this.modalNumberInput = '';
+    this.modalAmountInput = '';
+    this.tempNumber = null;
+    this.tempAmount = null;
+  }
+
+  // Modal 1: Selección de número
+  pressModalNumber(num: number): void {
+    console.log('Presionando número:', num);
+    if (this.modalNumberInput.length < 2) {
+      this.modalNumberInput += num.toString();
+      console.log('Input actual:', this.modalNumberInput);
+    }
+  }
+
+  clearModalNumber(): void {
+    console.log('Limpiando número');
+    this.modalNumberInput = '';
+    // Forzar detección de cambios
+    setTimeout(() => {
+      console.log('Número limpiado, input actual:', this.modalNumberInput);
+    }, 0);
+  }
+
+  acceptModalNumber(): void {
+    console.log('Aceptando número:', this.modalNumberInput);
+    
+    // Evitar múltiples ejecuciones
+    if (!this.modalNumberInput || this.showAmountModal) {
+      if (!this.modalNumberInput) {
+        this.notificationService.showError('Número requerido', 'Debe ingresar un número');
+      }
+      return;
+    }
+
+    // Formatear el número con ceros a la izquierda si es necesario
+    let formattedNumber = this.modalNumberInput.padStart(2, '0');
+    const numero = parseInt(formattedNumber);
+    
+    if (numero >= 0 && numero <= 99) {
+      this.tempNumber = numero;
+      
+      // Cerrar modal actual y abrir siguiente
+      this.showNumberModal = false;
+      
+      // Usar setTimeout para asegurar que el cambio se aplique
+      setTimeout(() => {
+        this.showAmountModal = true;
+        this.modalAmountInput = '';
+        console.log('Modal de apuesta abierto, número seleccionado:', numero);
+      }, 100);
+      
+    } else {
+      this.notificationService.showError('Número inválido', 'El número debe estar entre 00 y 99');
+    }
+  }
+
+  // Modal 2: Selección de apuesta
+  pressModalAmount(num: number): void {
+    console.log('Presionando cantidad:', num);
+    if (this.modalAmountInput.length < 4) { // Máximo 4 dígitos para el monto
+      this.modalAmountInput += num.toString();
+      console.log('Monto actual:', this.modalAmountInput);
+    }
+  }
+
+  clearModalAmount(): void {
+    console.log('Limpiando monto');
+    this.modalAmountInput = '';
+    // Forzar detección de cambios
+    setTimeout(() => {
+      console.log('Monto limpiado, input actual:', this.modalAmountInput);
+    }, 0);
+  }
+
+  acceptModalAmount(): void {
+    console.log('Aceptando monto:', this.modalAmountInput);
+    if (!this.modalAmountInput) {
+      this.notificationService.showError('Monto requerido', 'Debe ingresar un monto');
+      return;
+    }
+
+    const monto = parseFloat(this.modalAmountInput);
+    if (monto > 0 && monto <= 1000) { // Límite de apuesta
+      this.tempAmount = monto;
+      this.showAmountModal = false;
+      this.showConfirmModal = true;
+      console.log('Pasando a confirmación, monto:', monto);
+    } else {
+      this.notificationService.showError('Monto inválido', 'El monto debe estar entre 1 y 1000');
+    }
+  }
+
+  // Modal 3: Confirmación
+  confirmAddNumber(): void {
+    if (this.tempNumber !== null && this.tempAmount !== null) {
+      // Verificar si el número ya fue seleccionado
+      const existingIndex = this.selectedNumbers.findIndex(n => n.numero === this.tempNumber);
+      if (existingIndex >= 0) {
+        // Actualizar monto
+        this.selectedNumbers[existingIndex].monto += this.tempAmount!;
+      } else {
+        // Agregar nuevo número
+        this.selectedNumbers.push({
+          numero: this.tempNumber,
+          monto: this.tempAmount
+        });
+      }
+      
+      this.notificationService.showSuccess('Número agregado', `Número ${this.tempNumber.toString().padStart(2, '0')} agregado con apuesta de L. ${this.tempAmount}`);
+      this.closeAllModals();
+    }
+  }
+
+  cancelAddNumber(): void {
+    this.closeAllModals();
+  }
+
+  // Verificación de restricciones de tiempo
+  checkTimeRestrictions() {
+    if (!this.currentSorteo) return;
+
+    const now = new Date();
+    const [hours, minutes] = this.currentSorteo.closeTime.split(':');
+    const closeTime = new Date();
+    closeTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    const timeDiff = closeTime.getTime() - now.getTime();
+    const minutesLeft = Math.floor(timeDiff / (1000 * 60));
+
+    if (minutesLeft <= 5 && minutesLeft >= 0) {
+      this.isBlocked = true;
+      if (minutesLeft <= 0) {
+        this.notificationService.showWarning('Sorteo cerrado', 'El sorteo ya ha comenzado. No se pueden realizar más ventas.');
+      } else {
+        this.notificationService.showWarning('Ventas bloqueadas', `Faltan ${minutesLeft} minutos para el sorteo. Ventas bloqueadas.`);
+      }
+    } else {
+      this.isBlocked = false;
+    }
+  }
+
+  // Filtrar ventas solo del día actual
+  getFilteredSales(): Sale[] {
+    if (!this.recentSales) return [];
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return this.recentSales.filter((sale: Sale) => {
+      const saleDate = new Date(sale.createdAt);
+      saleDate.setHours(0, 0, 0, 0);
+      return saleDate.getTime() === today.getTime();
+    });
+  }
+
+  // Obtener fecha de hoy formateada
+  getTodayDate(): string {
+    return new Date().toLocaleDateString('es-HN', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  }
+
+  // Formatear hora
+  formatTime(date: string | Date): string {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleTimeString('es-HN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  }
+
+  // Método para cargar ventas recientes (inicializar recentSales)
+  async loadRecentSales(): Promise<void> {
+    try {
+      // Este método debe cargar las ventas del día actual
+      this.recentSales = this.todaySales;
+    } catch (error) {
+      console.error('Error cargando ventas recientes:', error);
+      this.recentSales = [];
+    }
+  }
+
+  // Método mejorado para reimprimir recibo
+  async reprintReceipt(sale: Sale): Promise<void> {
+    try {
+      console.log('Reimprimiendo recibo para venta:', sale);
+      
+      // Obtener detalles de la venta desde la base de datos
+      const details = await this.supabaseService.getSaleDetails(sale.id);
+      console.log('Detalles obtenidos de la BD:', details);
+      
+      if (details.length === 0) {
+        console.warn('No se encontraron detalles para la venta:', sale.id);
+        // Mostrar un mensaje al usuario
+        alert('No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
+        return;
+      }
+      
+      // Generar recibo con los detalles obtenidos
+      this.printService.generateThermalReceipt(sale, details);
+      
+    } catch (error) {
+      console.error('Error reimprimiendo recibo:', error);
+      alert('Error al reimprimir el recibo. Por favor intente nuevamente.');
     }
   }
 }

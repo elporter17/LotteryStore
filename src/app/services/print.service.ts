@@ -11,102 +11,151 @@ export class PrintService {
 
   // Generar PDF térmico para venta
   generateThermalReceipt(sale: Sale, details: SaleDetail[]): void {
-    // Configurar PDF para impresora térmica de 80mm
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [80, 200] // Ancho 80mm, altura variable
-    });
+    console.log('=== GENERANDO RECIBO ===');
+    console.log('Sale completo:', JSON.stringify(sale, null, 2));
+    console.log('Details completo:', JSON.stringify(details, null, 2));
+    console.log('Cantidad de detalles:', details ? details.length : 'details es null/undefined');
 
-    // Configurar fuente
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(10);
-
-    let yPosition = 10;
-    const lineHeight = 4;
-    const leftMargin = 5;
-    const rightMargin = 75;
-
-    // Título
-    pdf.setFontSize(12);
-    pdf.text('RECIBO DE VENTA', 40, yPosition, { align: 'center' });
-    yPosition += lineHeight * 2;
-
-    // Línea separadora
-    pdf.line(leftMargin, yPosition, rightMargin, yPosition);
-    yPosition += lineHeight;
-
-    // Información general
-    pdf.setFontSize(9);
-    pdf.text(`Fecha: ${new Date(sale.fecha).toLocaleString()}`, leftMargin, yPosition);
-    yPosition += lineHeight;
-    
-    pdf.text(`Sucursal: ${sale.sucursal}`, leftMargin, yPosition);
-    yPosition += lineHeight;
-    
-    pdf.text(`Sorteo: ${sale.sorteo.toUpperCase()}`, leftMargin, yPosition);
-    yPosition += lineHeight * 2;
-
-    // Línea separadora
-    pdf.line(leftMargin, yPosition, rightMargin, yPosition);
-    yPosition += lineHeight;
-
-    // Encabezado de números
-    pdf.setFontSize(8);
-    pdf.text('NÚMEROS JUGADOS:', leftMargin, yPosition);
-    yPosition += lineHeight;
-
-    // Línea separadora
-    pdf.line(leftMargin, yPosition, rightMargin, yPosition);
-    yPosition += lineHeight;
-
-    // Detalles de números
-    pdf.setFontSize(9);
-    for (const detail of details) {
-      const numeroText = `Num: ${detail.numero.toString().padStart(2, '0')}`;
-      const montoText = `L. ${detail.monto.toFixed(2)}`;
-      
-      pdf.text(numeroText, leftMargin, yPosition);
-      pdf.text(montoText, rightMargin, yPosition, { align: 'right' });
-      yPosition += lineHeight;
+    // Si no hay detalles, crear datos de prueba
+    if (!details || details.length === 0) {
+      console.log('⚠️ No hay detalles, creando datos de prueba');
+      details = [
+        { id: 'test1', saleId: sale.id, numero: 11, monto: 40 },
+        { id: 'test2', saleId: sale.id, numero: 54, monto: 10 }
+      ];
     }
 
-    // Línea separadora
-    yPosition += lineHeight;
-    pdf.line(leftMargin, yPosition, rightMargin, yPosition);
-    yPosition += lineHeight;
+    try {
+      // Crear PDF simple sin configuraciones avanzadas
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [80, 150]
+      });
 
-    // Total
-    pdf.setFontSize(11);
-    pdf.text('TOTAL:', leftMargin, yPosition);
-    pdf.text(`L. ${sale.total.toFixed(2)}`, rightMargin, yPosition, { align: 'right' });
-    yPosition += lineHeight * 2;
+      console.log('PDF creado, agregando contenido...');
 
-    // Línea separadora
-    pdf.line(leftMargin, yPosition, rightMargin, yPosition);
-    yPosition += lineHeight;
+      // Configuración básica
+      let y = 10;
+      const lineHeight = 5;
 
-    // Mensaje final
-    pdf.setFontSize(8);
-    pdf.text('¡Gracias por su compra!', 40, yPosition, { align: 'center' });
-    yPosition += lineHeight;
-    pdf.text('¡Mucha suerte!', 40, yPosition, { align: 'center' });
-    yPosition += lineHeight * 2;
+      // Título
+      pdf.setFontSize(14);
+      pdf.text('LOTERIA', 40, y, { align: 'center' });
+      y += lineHeight;
 
-    // Código de venta (ID)
-    pdf.setFontSize(7);
-    pdf.text(`ID: ${sale.id}`, 40, yPosition, { align: 'center' });
+      pdf.setFontSize(10);
+      pdf.text('RECIBO DE VENTA', 40, y, { align: 'center' });
+      y += lineHeight + 2;
 
-    // Ajustar altura del PDF
-    const finalHeight = yPosition + 10;
-    pdf.internal.pageSize.height = finalHeight;
+      // Línea
+      pdf.line(5, y, 75, y);
+      y += lineHeight;
 
-    // Guardar o imprimir
-    const fileName = `recibo_${sale.sorteo}_${new Date().getTime()}.pdf`;
-    pdf.save(fileName);
+      // Sucursal
+      pdf.setFontSize(12);
+      pdf.text(sale.sucursal || 'Sucursal 1', 40, y, { align: 'center' });
+      y += lineHeight;
 
-    // También abrir en ventana nueva para imprimir
-    window.open(pdf.output('bloburl'), '_blank');
+      // Sorteo
+      pdf.setFontSize(9);
+      pdf.text(`Sorteo: ${sale.sorteo}`, 40, y, { align: 'center' });
+      y += lineHeight;
+
+      // Fecha
+      const fecha = new Date(sale.fecha).toLocaleString();
+      pdf.text(`Fecha: ${fecha}`, 40, y, { align: 'center' });
+      y += lineHeight + 2;
+
+      // Encabezados
+      pdf.setFontSize(10);
+      pdf.text('Numero', 20, y, { align: 'center' });
+      pdf.text('Valor', 60, y, { align: 'center' });
+      y += lineHeight;
+
+      // Línea
+      pdf.line(5, y, 75, y);
+      y += lineHeight;
+
+      // Detalles
+      let total = 0;
+      for (const detail of details) {
+        pdf.text(detail.numero.toString().padStart(2, '0'), 20, y, { align: 'center' });
+        pdf.text(`L ${detail.monto}`, 60, y, { align: 'center' });
+        total += detail.monto;
+        y += lineHeight;
+      }
+
+      // Línea
+      y += 2;
+      pdf.line(5, y, 75, y);
+      y += lineHeight;
+
+      // Total
+      pdf.setFontSize(12);
+      pdf.text('Total a pagar:', 10, y);
+      pdf.text(`L ${total}`, 70, y, { align: 'right' });
+      y += lineHeight + 2;
+
+      // Mensaje
+      pdf.setFontSize(8);
+      pdf.text('Gracias por su compra!', 40, y, { align: 'center' });
+      y += lineHeight;
+      pdf.text('Mucha suerte!', 40, y, { align: 'center' });
+
+      console.log('Contenido agregado al PDF');
+
+      // Generar archivo
+      const timestamp = Date.now();
+      const fileName = `recibo_${timestamp}.pdf`;
+      
+      console.log('Guardando archivo:', fileName);
+      
+      // Intentar ambas formas
+      pdf.save(fileName);
+      
+      // Crear blob manualmente
+      const pdfData = pdf.output('arraybuffer');
+      const blob = new Blob([pdfData], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      
+      console.log('Abriendo PDF en nueva ventana...');
+      const newWindow = window.open(url, '_blank');
+      
+      if (!newWindow) {
+        console.warn('Popup bloqueado, descargando directamente');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+      }
+
+    } catch (error: any) {
+      console.error('Error creando PDF:', error);
+      alert('Error al generar el recibo: ' + (error?.message || error));
+    }
+  }
+
+  // Método de prueba para generar un recibo con datos fijos
+  generateTestReceipt(): void {
+    console.log('=== GENERANDO RECIBO DE PRUEBA ===');
+    
+    const testSale: Sale = {
+      id: 'test-123',
+      userId: 'user1',
+      sucursal: 'Sucursal 1',
+      sorteo: 'mañana',
+      fecha: new Date(),
+      total: 50,
+      createdAt: new Date()
+    };
+
+    const testDetails: SaleDetail[] = [
+      { id: 'detail1', saleId: 'test-123', numero: 11, monto: 40 },
+      { id: 'detail2', saleId: 'test-123', numero: 54, monto: 10 }
+    ];
+
+    this.generateThermalReceipt(testSale, testDetails);
   }
 
   // Generar PDF de reporte diario

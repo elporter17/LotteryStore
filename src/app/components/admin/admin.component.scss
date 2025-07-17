@@ -374,7 +374,71 @@
   }
 }
 
-// Responsive design
+// Cards de resumen
+.summary-card {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  
+  &:hover {
+    transform: translateY(-2px);
+  }
+  
+  .card-body {
+    padding: 1.5rem;
+  }
+  
+  .card-title {
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.9;
+  }
+  
+  .card-icon {
+    opacity: 0.3;
+  }
+  
+  h4 {
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin: 0;
+  }
+}
+
+// Sales container con scroll
+.sales-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+}
+
+// Modal styles
+.modal {
+  &.show {
+    display: block !important;
+  }
+}
+
+.modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+// Gestión de usuarios
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #000;
+  opacity: 0.5;
+  
+  &:hover {
+    opacity: 0.75;
+  }
+}
+
+// Responsive mejoras
 @media (max-width: 768px) {
   .container {
     padding: 10px;
@@ -407,6 +471,14 @@
     th, td {
       padding: 8px;
     }
+  }
+  
+  .summary-card h4 {
+    font-size: 1.4rem;
+  }
+  
+  .sales-container {
+    max-height: 300px;
   }
 }
 

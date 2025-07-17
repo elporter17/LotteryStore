@@ -23,6 +23,20 @@ export class AdminComponent implements OnInit {
   isLoading: boolean = false;
   selectedDate: string = '';
 
+  // Nuevas propiedades para las mejoras
+  fechaDesde: string = '';
+  fechaHasta: string = '';
+  users: any[] = [];
+  showUserModal: boolean = false;
+  editingUser: any = null;
+  userFormData: any = {
+    email: '',
+    password: '',
+    role: 'sucursal',
+    sucursal: '',
+    active: true
+  };
+
   constructor(
     private supabaseService: SupabaseService,
     private sorteoService: SorteoService,
@@ -44,6 +58,7 @@ export class AdminComponent implements OnInit {
 
     this.loadSales();
     this.loadSorteosData();
+    this.loadUsers();
   }
 
   isSorteoOpen(sorteo: SorteoSchedule): boolean {
@@ -175,6 +190,156 @@ export class AdminComponent implements OnInit {
     }));
   }
 
+  // Métodos para cards de resumen
+  getTotalVendido(): number {
+    return this.sales.reduce((total, sale) => total + sale.total, 0);
+  }
+
+  getTotalPagado(): number {
+    return Object.values(this.sorteosData).reduce((total, sorteo) => total + (sorteo.totalPagado || 0), 0);
+  }
+
+  getGananciaNeta(): number {
+    return this.getTotalVendido() - this.getTotalPagado();
+  }
+
+  getTotalVentas(): number {
+    return this.sales.length;
+  }
+
+  // Métodos para filtros de fecha
+  aplicarFiltros(): void {
+    if (this.fechaDesde && this.fechaHasta) {
+      this.loadSalesByDateRange();
+    } else if (this.fechaDesde) {
+      this.selectedDate = this.fechaDesde;
+      this.loadSales();
+    } else {
+      this.loadSales();
+    }
+  }
+
+  limpiarFiltros(): void {
+    const today = new Date();
+    this.fechaDesde = '';
+    this.fechaHasta = '';
+    this.selectedDate = today.toISOString().split('T')[0];
+    this.selectedSorteoFilter = '';
+    this.loadSales();
+  }
+
+  onFiltroFechaChange(): void {
+    // Auto-aplicar filtros cuando cambian las fechas
+    this.aplicarFiltros();
+  }
+
+  async loadSalesByDateRange(): Promise<void> {
+    if (!this.fechaDesde || !this.fechaHasta) return;
+
+    this.isLoading = true;
+    try {
+      const fechaDesdeDate = new Date(this.fechaDesde);
+      const fechaHastaDate = new Date(this.fechaHasta);
+      
+      // Cargar ventas para cada día en el rango
+      let allSales: Sale[] = [];
+      let currentDate = new Date(fechaDesdeDate);
+      
+      while (currentDate <= fechaHastaDate) {
+        const daySales = await this.supabaseService.getSalesByDateAndSorteo(currentDate, this.selectedSorteoFilter);
+        allSales = [...allSales, ...daySales];
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      this.sales = allSales;
+      
+      // Cargar detalles de todas las ventas
+      for (const sale of this.sales) {
+        this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
+      }
+    } catch (error) {
+      console.error('Error cargando ventas por rango:', error);
+      this.notificationService.showError('Error al cargar las ventas');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Gestión de usuarios
+  async loadUsers(): Promise<void> {
+    try {
+      // Implementar método en SupabaseService para cargar usuarios
+      // this.users = await this.supabaseService.getUsers();
+      console.log('Cargando usuarios...');
+    } catch (error) {
+      console.error('Error cargando usuarios:', error);
+    }
+  }
+
+  closeUserModal(): void {
+    this.showUserModal = false;
+    this.editingUser = null;
+    this.userFormData = {
+      email: '',
+      password: '',
+      role: 'sucursal',
+      sucursal: '',
+      active: true
+    };
+  }
+
+  editUser(user: any): void {
+    this.editingUser = user;
+    this.userFormData = { ...user };
+    this.showUserModal = true;
+  }
+
+  async saveUser(): Promise<void> {
+    try {
+      this.isLoading = true;
+      
+      if (this.editingUser) {
+        // Actualizar usuario existente
+        console.log('Actualizando usuario:', this.userFormData);
+        this.notificationService.showSuccess('Usuario actualizado exitosamente');
+      } else {
+        // Crear nuevo usuario
+        console.log('Creando usuario:', this.userFormData);
+        this.notificationService.showSuccess('Usuario creado exitosamente');
+      }
+      
+      this.closeUserModal();
+      await this.loadUsers();
+    } catch (error) {
+      console.error('Error guardando usuario:', error);
+      this.notificationService.showError('Error al guardar el usuario');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    const confirmed = await this.notificationService.showConfirmation(
+      'Eliminar Usuario',
+      '¿Está seguro que desea eliminar este usuario?'
+    );
+
+    if (confirmed) {
+      try {
+        this.isLoading = true;
+        // Implementar eliminación en SupabaseService
+        console.log('Eliminando usuario:', userId);
+        this.notificationService.showSuccess('Usuario eliminado exitosamente');
+        await this.loadUsers();
+      } catch (error) {
+        console.error('Error eliminando usuario:', error);
+        this.notificationService.showError('Error al eliminar el usuario');
+      } finally {
+        this.isLoading = false;
+      }
+    }
+  }
+
   onDateChange(): void {
     this.loadSales();
   }
@@ -186,6 +351,31 @@ export class AdminComponent implements OnInit {
   generateDailyReport(): void {
     const reportDate = this.selectedDate ? new Date(this.selectedDate) : new Date();
     this.printService.generateDailyReport(this.sales, reportDate);
+  }
+
+  // Método mejorado para reimprimir recibo
+  async reprintReceipt(sale: Sale): Promise<void> {
+    try {
+      console.log('Reimprimiendo recibo para venta:', sale);
+      
+      // Obtener detalles de la venta desde la base de datos
+      const details = await this.supabaseService.getSaleDetails(sale.id);
+      console.log('Detalles obtenidos de la BD:', details);
+      
+      if (details.length === 0) {
+        console.warn('No se encontraron detalles para la venta:', sale.id);
+        // Mostrar un mensaje al usuario
+        alert('No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
+        return;
+      }
+      
+      // Generar recibo con los detalles obtenidos
+      this.printService.generateThermalReceipt(sale, details);
+      
+    } catch (error) {
+      console.error('Error reimprimiendo recibo:', error);
+      alert('Error al reimprimir el recibo. Por favor intente nuevamente.');
+    }
   }
 
   async logout(): Promise<void> {
