@@ -43,14 +43,29 @@ export class SucursalComponent implements OnInit {
       }
     });
 
-    this.updateSorteoInfo();
-    this.loadTodaySales();
-    this.setFilterDate();
-    
-    // Actualizar cada minuto
-    setInterval(() => {
-      this.updateSorteoInfo();
-    }, 60000);
+    this.initializeComponent();
+  }
+
+  private async initializeComponent(): Promise<void> {
+    try {
+      this.isLoading = true;
+      this.notificationService.showLoading('Cargando datos...');
+
+      await this.updateSorteoInfo();
+      await this.loadTodaySales();
+      this.setFilterDate();
+      
+      // Actualizar cada minuto
+      setInterval(() => {
+        this.updateSorteoInfo();
+      }, 60000);
+    } catch (error) {
+      console.error('Error inicializando componente:', error);
+      this.notificationService.showError('Error al cargar los datos');
+    } finally {
+      this.isLoading = false;
+      this.notificationService.hideLoading();
+    }
   }
 
   setFilterDate(): void {
@@ -76,11 +91,15 @@ export class SucursalComponent implements OnInit {
   }
 
   updateSorteoInfo(): void {
-    this.currentSorteo = this.sorteoService.getCurrentSorteo();
-    
-    if (this.currentSorteo) {
-      this.isSorteoOpen = this.sorteoService.isSorteoOpen(this.currentSorteo);
-      this.timeUntilClose = this.sorteoService.getTimeUntilClose(this.currentSorteo);
+    try {
+      this.currentSorteo = this.sorteoService.getCurrentSorteo();
+      
+      if (this.currentSorteo) {
+        this.isSorteoOpen = this.sorteoService.isSorteoOpen(this.currentSorteo);
+        this.timeUntilClose = this.sorteoService.getTimeUntilClose(this.currentSorteo);
+      }
+    } catch (error) {
+      console.error('Error actualizando info del sorteo:', error);
     }
   }
 
@@ -202,27 +221,32 @@ export class SucursalComponent implements OnInit {
   async loadTodaySales(): Promise<void> {
     if (!this.currentUser) return;
 
-    this.isLoading = true;
-    this.notificationService.showLoading('Cargando ventas...');
-
     try {
       const today = new Date();
       const allSales = await this.supabaseService.getSalesByDateAndSorteo(today, '');
       
       this.todaySales = allSales.filter(sale => sale.sucursal === this.currentUser.sucursal);
       
-      // Cargar detalles de cada venta
+      // Cargar detalles de cada venta con timeout individual
       for (const sale of this.todaySales) {
-        this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
+        try {
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Timeout cargando detalles')), 3000);
+          });
+          
+          const detailsPromise = this.supabaseService.getSaleDetails(sale.id);
+          
+          this.saleDetails[sale.id] = await Promise.race([detailsPromise, timeoutPromise]) as SaleDetail[];
+        } catch (error) {
+          console.warn(`Error cargando detalles de venta ${sale.id}:`, error);
+          this.saleDetails[sale.id] = [];
+        }
       }
 
       this.filterSales();
     } catch (error) {
       console.error('Error cargando ventas:', error);
       this.notificationService.showError('Error al cargar las ventas');
-    } finally {
-      this.isLoading = false;
-      this.notificationService.hideLoading();
     }
   }
 

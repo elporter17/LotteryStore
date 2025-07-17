@@ -21,13 +21,25 @@ export class SupabaseService {
     // Escuchar cambios en la autenticación
     this.supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
-      console.log('Auth state change event:', event);
-      console.log('Auth state change session:', session); 
+      
       if (session?.user) {
         console.log('Usuario autenticado:', session.user.id);
-        const userData = await this.getUserData(session.user.id);
+        
+        // Usar datos básicos inmediatamente
+        const userData: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          role: 'sucursal' as const,
+          sucursal: 'Principal',
+          active: true,
+          createdAt: new Date()
+        };
+        
         console.log('Setting user data:', userData);
         this.currentUserSubject.next(userData);
+        
+        // Cargar datos adicionales en segundo plano
+        this.loadUserDataInBackground(session.user.id);
       } else {
         console.log('No session, clearing user');
         this.currentUserSubject.next(null);
@@ -39,23 +51,77 @@ export class SupabaseService {
   private async initializeSession(): Promise<void> {
     try {
       console.log('Inicializando sesión...');
+      
       const { data: { session }, error } = await this.supabase.auth.getSession();
       
       if (error) {
         console.error('Error obteniendo sesión:', error);
+        this.currentUserSubject.next(null);
         return;
       }
       
       if (session?.user) {
         console.log('Sesión encontrada:', session.user.id);
-        const userData = await this.getUserData(session.user.id);
+        
+        // Usar directamente los datos de la sesión para evitar timeouts
+        const userData: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          role: 'sucursal' as const,
+          sucursal: 'Principal',
+          active: true,
+          createdAt: new Date()
+        };
+        
         console.log('Datos de usuario inicializados:', userData);
         this.currentUserSubject.next(userData);
+        
+        // Intentar obtener datos de la tabla users en segundo plano (no bloqueante)
+        this.loadUserDataInBackground(session.user.id);
       } else {
         console.log('No hay sesión activa');
+        this.currentUserSubject.next(null);
       }
     } catch (error) {
       console.error('Error inicializando sesión:', error);
+      this.currentUserSubject.next(null);
+    }
+  }
+
+  // Cargar datos del usuario en segundo plano
+  private async loadUserDataInBackground(uid: string): Promise<void> {
+    try {
+      console.log('Cargando datos de usuario en segundo plano...');
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Background load timeout')), 5000);
+      });
+      
+      const queryPromise = this.supabase
+        .from('users')
+        .select('*')
+        .eq('id', uid)
+        .single();
+      
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      
+      if (data && !error) {
+        console.log('Datos actualizados desde la base de datos:', data);
+        const updatedUser: User = {
+          id: data.id,
+          email: data.email,
+          role: data.role,
+          sucursal: data.sucursal,
+          active: data.active,
+          createdAt: new Date(data.created_at)
+        };
+        this.currentUserSubject.next(updatedUser);
+      } else {
+        console.log('No se pudieron cargar datos adicionales, manteniendo datos por defecto');
+      }
+    } catch (error) {
+      console.warn('Error cargando datos en segundo plano:', error);
+      // No hacer nada, mantener los datos por defecto
     }
   }
 
@@ -93,12 +159,27 @@ export class SupabaseService {
     if (error) throw error;
   }
 
+  // Verificar conexión a la base de datos
+  async testConnection(): Promise<boolean> {
+    try {
+      const { data, error } = await this.supabase
+        .from('usuarios')
+        .select('count')
+        .limit(1);
+      
+      return !error;
+    } catch (error) {
+      console.error('Error testando conexión:', error);
+      return false;
+    }
+  }
+
   // Usuarios
   async getUserData(uid: string): Promise<User | null> {
     try {
       console.log('Buscando usuario con UID:', uid);
       
-      // Primero intentar obtener datos del usuario autenticado
+      // Primero obtener datos básicos de auth
       const { data: authUser, error: authError } = await this.supabase.auth.getUser();
       
       if (authError || !authUser.user) {
@@ -106,13 +187,20 @@ export class SupabaseService {
         return null;
       }
 
-      console.log('Usuario autenticado encontrado:', authUser.user);
-      
-      // Intentar obtener datos de la tabla users con timeout
-      let userData = null;
+      // Datos por defecto usando auth
+      const defaultUserData: User = {
+        id: authUser.user.id,
+        email: authUser.user.email || '',
+        role: 'sucursal' as const,
+        sucursal: 'Principal',
+        active: true,
+        createdAt: new Date()
+      };
+
+      // Intentar obtener datos de la tabla users con timeout muy corto
       try {
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout')), 5000); // 5 segundos timeout
+          setTimeout(() => reject(new Error('Database timeout')), 1000); // 1 segundo timeout
         });
         
         const queryPromise = this.supabase
@@ -123,37 +211,24 @@ export class SupabaseService {
         
         const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
         
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error obteniendo usuario de tabla users:', error);
-        } else if (data) {
-          userData = data;
+        if (data && !error) {
+          console.log('Usuario encontrado en tabla users:', data);
+          return {
+            id: data.id,
+            email: data.email,
+            role: data.role,
+            sucursal: data.sucursal,
+            active: data.active,
+            createdAt: new Date(data.created_at)
+          } as User;
         }
-      } catch (timeoutError) {
-        console.warn('Timeout consultando tabla users, usando datos por defecto');
+      } catch (dbError) {
+        console.warn('Error/timeout consultando tabla users, usando datos por defecto:', dbError);
       }
 
-      // Si no hay datos en la tabla users, crear usuario por defecto
-      if (!userData) {
-        console.log('Creando usuario por defecto con datos de auth');
-        return {
-          id: authUser.user.id,
-          email: authUser.user.email || '',
-          role: 'sucursal' as const,
-          sucursal: 'Principal',
-          active: true,
-          createdAt: new Date()
-        } as User;
-      }
-
-      console.log('Usuario encontrado en tabla users:', userData);
-      return {
-        id: userData.id,
-        email: userData.email,
-        role: userData.role,
-        sucursal: userData.sucursal,
-        active: userData.active,
-        createdAt: new Date(userData.created_at)
-      } as User;
+      console.log('Usando datos de auth como fallback');
+      return defaultUserData;
+      
     } catch (error) {
       console.error('Error en getUserData:', error);
       return null;

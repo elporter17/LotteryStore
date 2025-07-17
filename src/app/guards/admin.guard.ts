@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { CanActivate, Router } from '@angular/router';
 import { Observable } from 'rxjs';
-import { map, tap } from 'rxjs/operators';
+import { map, tap, timeout, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { SupabaseService } from '../services/supabase.service';
 
 @Injectable({
@@ -15,6 +16,7 @@ export class AdminGuard implements CanActivate {
 
   canActivate(): Observable<boolean> {
     return this.supabaseService.currentUser$.pipe(
+      timeout(5000), // 5 segundos timeout
       map(user => {
         console.log('AdminGuard - Usuario actual:', user);
         return user?.role === 'admin';
@@ -25,6 +27,11 @@ export class AdminGuard implements CanActivate {
           console.log('AdminGuard - Redirigiendo a login');
           this.router.navigate(['/login']);
         }
+      }),
+      catchError(error => {
+        console.error('AdminGuard - Error o timeout:', error);
+        this.router.navigate(['/login']);
+        return of(false);
       })
     );
   }
