@@ -21,6 +21,7 @@ export class AdminComponent implements OnInit {
   factorMultiplicador: { [key: string]: number } = {};
   selectedSorteoFilter: string = '';
   isLoading: boolean = false;
+  isLoadingFilters: boolean = false; // Loading específico para filtros
   selectedDate: string = '';
   
 
@@ -37,6 +38,11 @@ export class AdminComponent implements OnInit {
     sucursal: '',
     active: true
   };
+
+  // Propiedades para modal de detalles de venta
+  showSaleDetailModal: boolean = false;
+  selectedSaleForDetail: Sale | null = null;
+  selectedSaleDetails: SaleDetail[] = [];
 
   // Propiedades para gestión de sorteos
   showSorteoModal: boolean = false;
@@ -368,98 +374,132 @@ export class AdminComponent implements OnInit {
   }
 
   // Métodos para filtros de fecha
-  aplicarFiltros(): void {
-    console.log('=== APLICANDO FILTROS CON DATE-FNS ===');
-    console.log('FechaDesde:', this.fechaDesde);
-    console.log('FechaHasta:', this.fechaHasta);
-    console.log('SelectedDate:', this.selectedDate);
-    console.log('Sorteo filtro:', this.selectedSorteoFilter);
-    
-    // Validar que las fechas sean válidas
-    if (this.fechaDesde && this.fechaHasta) {
-      const fechaDesde = new Date(this.fechaDesde);
-      const fechaHasta = new Date(this.fechaHasta);
+  async aplicarFiltros(): Promise<void> {
+    try {
+      this.isLoadingFilters = true;
+      console.log('=== APLICANDO FILTROS CON DATE-FNS ===');
+      console.log('FechaDesde:', this.fechaDesde);
+      console.log('FechaHasta:', this.fechaHasta);
+      console.log('SelectedDate:', this.selectedDate);
+      console.log('Sorteo filtro:', this.selectedSorteoFilter);
       
-      if (fechaDesde > fechaHasta) {
-        this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
-        return;
+      // Validar que las fechas sean válidas
+      if (this.fechaDesde && this.fechaHasta) {
+        const fechaDesde = new Date(this.fechaDesde);
+        const fechaHasta = new Date(this.fechaHasta);
+        
+        if (fechaDesde > fechaHasta) {
+          this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
+          return;
+        }
+        
+        console.log('=== USANDO FILTRO DE RANGO ===');
+        console.log('Desde:', fechaDesde);
+        console.log('Hasta:', fechaHasta);
       }
       
-      console.log('=== USANDO FILTRO DE RANGO ===');
-      console.log('Desde:', fechaDesde);
-      console.log('Hasta:', fechaHasta);
+      // Guardar estado de filtros
+      this.saveFilterState();
+      
+      // Recargar ventas
+      await this.loadSales();
+      
+    } catch (error) {
+      console.error('Error aplicando filtros:', error);
+      this.notificationService.showError('Error al aplicar filtros');
+    } finally {
+      this.isLoadingFilters = false;
     }
-    
-    // Guardar estado de filtros
-    this.saveFilterState();
-    
-    // Recargar ventas
-    this.loadSales();
   }
 
-  limpiarFiltros(): void {
-    console.log('=== LIMPIANDO FILTROS CON DATE-FNS ===');
-    const hondurasToday = this.supabaseService.getHondurasDateTime();
-    
-    // Reinicializar fechas usando date-fns
-    const fechaInicio = startOfDay(hondurasToday);
-    const fechaFin = endOfDay(hondurasToday);
-    
-    this.fechaDesde = this.formatDateTimeLocal(fechaInicio);
-    this.fechaHasta = this.formatDateTimeLocal(fechaFin);
-    this.selectedDate = hondurasToday.toISOString().split('T')[0];
-    this.selectedSorteoFilter = '';
-    
-    console.log('Filtros reiniciados:');
-    console.log('- FechaDesde:', this.fechaDesde);
-    console.log('- FechaHasta:', this.fechaHasta);
-    console.log('- SelectedDate:', this.selectedDate);
-    
-    // Guardar estado limpio
-    this.saveFilterState();
-    
-    this.loadSales();
+  async limpiarFiltros(): Promise<void> {
+    try {
+      this.isLoadingFilters = true;
+      console.log('=== LIMPIANDO FILTROS CON DATE-FNS ===');
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
+      
+      // Reinicializar fechas usando date-fns
+      const fechaInicio = startOfDay(hondurasToday);
+      const fechaFin = endOfDay(hondurasToday);
+      
+      this.fechaDesde = this.formatDateTimeLocal(fechaInicio);
+      this.fechaHasta = this.formatDateTimeLocal(fechaFin);
+      this.selectedDate = hondurasToday.toISOString().split('T')[0];
+      this.selectedSorteoFilter = '';
+      
+      console.log('Filtros reiniciados:');
+      console.log('- FechaDesde:', this.fechaDesde);
+      console.log('- FechaHasta:', this.fechaHasta);
+      console.log('- SelectedDate:', this.selectedDate);
+      
+      // Guardar estado limpio
+      this.saveFilterState();
+      
+      await this.loadSales();
+      
+    } catch (error) {
+      console.error('Error limpiando filtros:', error);
+      this.notificationService.showError('Error al limpiar filtros');
+    } finally {
+      this.isLoadingFilters = false;
+    }
   }
 
-  onFiltroFechaChange(): void {
+  async onFiltroFechaChange(): Promise<void> {
     console.log('=== CAMBIO EN FILTRO DE FECHA ===');
     console.log('FechaDesde actual:', this.fechaDesde);
     console.log('FechaHasta actual:', this.fechaHasta);
     
     // Auto-aplicar filtros cuando cambian las fechas
-    this.aplicarFiltros();
+    await this.aplicarFiltros();
   }
 
-  onDateChange(): void {
-    console.log('=== CAMBIO EN FECHA SELECCIONADA ===');
-    console.log('SelectedDate:', this.selectedDate);
-    
-    // Guardar cambio de fecha y recargar
-    this.saveFilterState();
-    this.loadSales();
+  async onDateChange(): Promise<void> {
+    try {
+      this.isLoadingFilters = true;
+      console.log('=== CAMBIO EN FECHA SELECCIONADA ===');
+      console.log('SelectedDate:', this.selectedDate);
+      
+      // Guardar cambio de fecha y recargar
+      this.saveFilterState();
+      await this.loadSales();
+    } catch (error) {
+      console.error('Error al cambiar fecha:', error);
+      this.notificationService.showError('Error al cambiar la fecha');
+    } finally {
+      this.isLoadingFilters = false;
+    }
   }
 
-  onSorteoFilterChange(): void {
-    console.log('=== CAMBIO EN FILTRO DE SORTEO ===');
-    console.log('SelectedSorteoFilter:', this.selectedSorteoFilter);
-    
-    // Guardar cambio de sorteo y recargar
-    this.saveFilterState();
-    this.loadSales();
+  async onSorteoFilterChange(): Promise<void> {
+    try {
+      this.isLoadingFilters = true;
+      console.log('=== CAMBIO EN FILTRO DE SORTEO ===');
+      console.log('SelectedSorteoFilter:', this.selectedSorteoFilter);
+      
+      // Guardar cambio de sorteo y recargar
+      this.saveFilterState();
+      await this.loadSales();
+    } catch (error) {
+      console.error('Error al cambiar filtro de sorteo:', error);
+      this.notificationService.showError('Error al cambiar el filtro de sorteo');
+    } finally {
+      this.isLoadingFilters = false;
+    }
   }
 
   // Método específico para cuando cambia fechaDesde
-  onFechaDesdeChange(): void {
+  async onFechaDesdeChange(): Promise<void> {
     console.log('=== CAMBIO EN FECHA DESDE ===');
     console.log('Nueva fechaDesde:', this.fechaDesde);
-    this.aplicarFiltros();
+    await this.aplicarFiltros();
   }
 
   // Método específico para cuando cambia fechaHasta
-  onFechaHastaChange(): void {
+  async onFechaHastaChange(): Promise<void> {
     console.log('=== CAMBIO EN FECHA HASTA ===');
     console.log('Nueva fechaHasta:', this.fechaHasta);
-    this.aplicarFiltros();
+    await this.aplicarFiltros();
   }
 
   async loadSalesByDateRange(): Promise<void> {
@@ -761,20 +801,34 @@ export class AdminComponent implements OnInit {
     return sorteo.id || index.toString();
   }
 
+  trackBySaleDetail(index: number, detail: SaleDetail): string {
+    return detail.id;
+  }
+
   verDetalles(sale: Sale): void {
+    console.log('=== MOSTRANDO DETALLES DE VENTA EN MODAL ===');
+    console.log('Sale:', sale);
+    
+    // Obtener detalles de la venta
     const details = this.getSaleDetails(sale.id);
-    const numeros = details.map(d => `#${d.numero.toString().padStart(2, '0')} x L${d.monto}`).join(', ');
+    console.log('Sale details:', details);
     
-    const mensaje = `Detalles de Venta\n\n` +
-                   `Recibo: ${sale.numeroRecibo}\n` +
-                   `Correlativo: ${sale.correlativo}\n` +
-                   `Fecha: ${this.formatDateTime(sale.createdAt)}\n` +
-                   `Sucursal: ${sale.sucursal}\n` +
-                   `Sorteo: ${sale.sorteo}\n` +
-                   `Total: L ${sale.total.toFixed(2)}\n\n` +
-                   `Números: ${numeros}`;
-    
-    alert(mensaje);
+    // Configurar modal
+    this.selectedSaleForDetail = sale;
+    this.selectedSaleDetails = details;
+    this.showSaleDetailModal = true;
+  }
+
+  // Método para cerrar el modal de detalles
+  closeSaleDetailModal(): void {
+    this.showSaleDetailModal = false;
+    this.selectedSaleForDetail = null;
+    this.selectedSaleDetails = [];
+  }
+
+  // Método para calcular total de números en el modal
+  getTotalNumeros(): number {
+    return this.selectedSaleDetails.reduce((total, detail) => total + detail.monto, 0);
   }
 
   createUser(): void {
