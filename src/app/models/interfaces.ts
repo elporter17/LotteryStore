@@ -46,7 +46,7 @@ export interface SorteoSchedule {
 }
 
 export const SORTEO_SCHEDULES: SorteoSchedule[] = [
-  { name: 'mañana', label: 'Mañana', closeTime: '10:55' },
+  { name: 'mañana', label: 'Mañana', closeTime: '9:15' },
   { name: 'tarde', label: 'Tarde', closeTime: '14:55' },
-  { name: 'noche', label: 'Noche', closeTime: '22:00' }
+  { name: 'noche', label: 'Noche', closeTime: '20:55' }
 ];
