@@ -1,391 +1,339 @@
-<div class="container">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fas fa-cog"></i> Panel de Administración</h2>
-    <button class="btn btn-danger" (click)="logout()" [disabled]="isLoading">
+<!-- PANEL DE ADMINISTRACIÓN CON ESTILO MINIMALISTA -->
+<div class="admin-interface">
+  <!-- Header -->
+  <div class="header-bar">
+    <div class="admin-title">
+      <h2><i class="fas fa-cog"></i> Panel de Administración</h2>
+    </div>
+    
+    <button class="btn-header btn-cerrar" (click)="logout()" [disabled]="isLoading">
       <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
     </button>
   </div>
 
-  <!-- Cards de Resumen General -->
-  <div class="row mb-4">
-    <div class="col-md-3 mb-3">
-      <div class="card summary-card bg-primary text-white">
-        <div class="card-body">
-          <div class="d-flex justify-content-between">
-            <div>
-              <h6 class="card-title"><i class="fas fa-money-bill-wave"></i> Total Vendido</h6>
-              <h4>L. {{ getTotalVendido().toFixed(2) }}</h4>
-            </div>
-            <div class="card-icon">
-              <i class="fas fa-chart-line fa-2x"></i>
-            </div>
-          </div>
-        </div>
-      </div>
+  <!-- Filtros de Fecha (similar al header de sucursal) -->
+  <div class="filters-bar">
+    <div class="filter-group">
+      <label for="fechaDesde">Desde:</label>
+      <input type="datetime-local" id="fechaDesde" class="form-control" 
+             [(ngModel)]="fechaDesde" (change)="onFiltroFechaChange()">
     </div>
     
-    <div class="col-md-3 mb-3">
-      <div class="card summary-card bg-warning text-white">
-        <div class="card-body">
-          <div class="d-flex justify-content-between">
-            <div>
-              <h6 class="card-title"><i class="fas fa-trophy"></i> Total Pagado</h6>
-              <h4>L. {{ getTotalPagado().toFixed(2) }}</h4>
-            </div>
-            <div class="card-icon">
-              <i class="fas fa-coins fa-2x"></i>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="filter-group">
+      <label for="fechaHasta">Hasta:</label>
+      <input type="datetime-local" id="fechaHasta" class="form-control" 
+             [(ngModel)]="fechaHasta" (change)="onFiltroFechaChange()">
     </div>
     
-    <div class="col-md-3 mb-3">
-      <div class="card summary-card" [class.bg-success]="getGananciaNeta() > 0" [class.bg-danger]="getGananciaNeta() < 0" class="text-white">
-        <div class="card-body">
-          <div class="d-flex justify-content-between">
-            <div>
-              <h6 class="card-title"><i class="fas fa-chart-pie"></i> Ganancia Neta</h6>
-              <h4>L. {{ getGananciaNeta().toFixed(2) }}</h4>
-            </div>
-            <div class="card-icon">
-              <i class="fas fa-piggy-bank fa-2x"></i>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="filter-group">
+      <label for="sorteoFilter">Sorteo:</label>
+      <select id="sorteoFilter" class="form-control" 
+              [(ngModel)]="selectedSorteoFilter" (change)="aplicarFiltros()">
+        <option value="">Todos los sorteos</option>
+        <option *ngFor="let sorteo of sorteos" [value]="sorteo.name">{{ sorteo.label }}</option>
+      </select>
     </div>
     
-    <div class="col-md-3 mb-3">
-      <div class="card summary-card bg-info text-white">
-        <div class="card-body">
-          <div class="d-flex justify-content-between">
-            <div>
-              <h6 class="card-title"><i class="fas fa-ticket-alt"></i> Ventas Totales</h6>
-              <h4>{{ getTotalVentas() }}</h4>
-            </div>
-            <div class="card-icon">
-              <i class="fas fa-shopping-cart fa-2x"></i>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Filtro de Fechas -->
-  <div class="row mb-4">
-    <div class="col-md-12">
-      <div class="card">
-        <div class="card-header">
-          <h5><i class="fas fa-filter"></i> Filtros de Fecha</h5>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="fechaDesde"><i class="fas fa-calendar-alt"></i> Fecha Desde:</label>
-              <input type="date" id="fechaDesde" class="form-control" 
-                     [(ngModel)]="fechaDesde" (change)="onFiltroFechaChange()">
-            </div>
-            <div class="col-md-4">
-              <label for="fechaHasta"><i class="fas fa-calendar-alt"></i> Fecha Hasta:</label>
-              <input type="date" id="fechaHasta" class="form-control" 
-                     [(ngModel)]="fechaHasta" (change)="onFiltroFechaChange()">
-            </div>
-            <div class="col-md-4 d-flex align-items-end">
-              <button class="btn btn-primary me-2" (click)="aplicarFiltros()">
-                <i class="fas fa-search"></i> Aplicar Filtros
-              </button>
-              <button class="btn btn-secondary" (click)="limpiarFiltros()">
-                <i class="fas fa-eraser"></i> Limpiar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Controles de Sorteo -->
-  <div class="row mb-4">
-    <div *ngFor="let sorteo of sorteos" class="col-md-4 mb-3">
-      <div class="card sorteo-card">
-        <div class="card-header">
-          <h4><i class="fas fa-dice"></i> {{ sorteo.label }}</h4>
-          <p class="mb-0">Cierra: {{ sorteo.closeTime }}</p>
-          <span class="badge" [class.badge-success]="isSorteoOpen(sorteo)" [class.badge-danger]="!isSorteoOpen(sorteo)">
-            {{ isSorteoOpen(sorteo) ? 'Abierto' : 'Cerrado' }}
-          </span>
-        </div>
-        
-        <div class="card-body">
-          <div *ngIf="getSorteoData(sorteo)?.numeroGanador; else setWinner">
-            <div class="winner-display">
-              <h3><i class="fas fa-trophy"></i> Ganador: {{ getSorteoData(sorteo)?.numeroGanador }}</h3>
-              <p>Factor: {{ getSorteoData(sorteo)?.factorMultiplicador || 70 }}</p>
-              <div class="results">
-                <div class="result-item">
-                  <strong>Vendido:</strong> L. {{ getSorteoData(sorteo)?.totalVendido?.toFixed(2) || '0.00' }}
-                </div>
-                <div class="result-item">
-                  <strong>Pagado:</strong> L. {{ getSorteoData(sorteo)?.totalPagado?.toFixed(2) || '0.00' }}
-                </div>
-                <div class="result-item" [class.text-success]="(getSorteoData(sorteo)?.gananciaNeta || 0) > 0" 
-                     [class.text-danger]="(getSorteoData(sorteo)?.gananciaNeta || 0) < 0">
-                  <strong>Ganancia:</strong> L. {{ getSorteoData(sorteo)?.gananciaNeta?.toFixed(2) || '0.00' }}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <ng-template #setWinner>
-            <div *ngIf="!isSorteoOpen(sorteo)" class="winner-form">
-              <div class="form-group">
-                <label><i class="fas fa-hashtag"></i> Número Ganador:</label>
-                <input type="number" class="form-control" min="1" max="99" 
-                       [(ngModel)]="winningNumbers[sorteo.name]" [disabled]="isLoading">
-              </div>
-              <div class="form-group">
-                <label><i class="fas fa-calculator"></i> Factor Multiplicador:</label>
-                <input type="number" class="form-control" min="1" max="100" step="0.1" 
-                       [(ngModel)]="factorMultiplicador[sorteo.name]" 
-                       [value]="factorMultiplicador[sorteo.name] || 70" [disabled]="isLoading">
-              </div>
-              <button class="btn btn-success btn-block" (click)="setWinningNumber(sorteo)" 
-                      [disabled]="!winningNumbers[sorteo.name] || isLoading">
-                <i class="fas fa-check"></i> Establecer Ganador
-              </button>
-            </div>
-          </ng-template>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Filtros -->
-  <div class="card mb-4">
-    <div class="card-header">
-      <h4><i class="fas fa-filter"></i> Filtros</h4>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        <div class="col-md-4">
-          <label><i class="fas fa-calendar"></i> Fecha:</label>
-          <input type="date" class="form-control" [(ngModel)]="selectedDate" 
-                 (change)="onDateChange()" [disabled]="isLoading">
-        </div>
-        <div class="col-md-4">
-          <label><i class="fas fa-filter"></i> Sorteo:</label>
-          <select class="form-control" [(ngModel)]="selectedSorteoFilter" 
-                  (change)="onSorteoFilterChange()" [disabled]="isLoading">
-            <option value="">Todos los sorteos</option>
-            <option *ngFor="let sorteo of sorteos" [value]="sorteo.name">
-              {{ sorteo.label }}
-            </option>
-          </select>
-        </div>
-        <div class="col-md-4 d-flex align-items-end">
-          <button class="btn btn-primary" (click)="generateDailyReport()" [disabled]="isLoading">
-            <i class="fas fa-file-pdf"></i> Generar Reporte
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Gestión de Usuarios -->
-  <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h4><i class="fas fa-users"></i> Gestión de Usuarios</h4>
-      <button class="btn btn-success" (click)="showUserModal = true">
-        <i class="fas fa-plus"></i> Nuevo Usuario
+    <div class="filter-actions">
+      <button class="btn-filter btn-primary" (click)="aplicarFiltros()" [disabled]="isLoading">
+        <i class="fas fa-search"></i> Filtrar
+      </button>
+      <button class="btn-filter btn-secondary" (click)="limpiarFiltros()" [disabled]="isLoading">
+        <i class="fas fa-eraser"></i> Limpiar
       </button>
     </div>
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-striped">
-          <thead>
-            <tr>
-              <th><i class="fas fa-envelope"></i> Email</th>
-              <th><i class="fas fa-user-tag"></i> Rol</th>
-              <th><i class="fas fa-store"></i> Sucursal</th>
-              <th><i class="fas fa-toggle-on"></i> Estado</th>
-              <th><i class="fas fa-cogs"></i> Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let user of users">
-              <td>{{ user.email }}</td>
-              <td>
-                <span class="badge" [class.badge-success]="user.role === 'admin'" [class.badge-primary]="user.role === 'sucursal'">
-                  {{ user.role | titlecase }}
-                </span>
-              </td>
-              <td>{{ user.sucursal || 'N/A' }}</td>
-              <td>
-                <span class="badge" [class.badge-success]="user.active" [class.badge-danger]="!user.active">
-                  {{ user.active ? 'Activo' : 'Inactivo' }}
-                </span>
-              </td>
-              <td>
-                <button class="btn btn-sm btn-outline-primary me-1" (click)="editUser(user)">
-                  <i class="fas fa-edit"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-danger" (click)="deleteUser(user.id)">
-                  <i class="fas fa-trash"></i>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
-  <!-- Ventas con Scroll -->
-  <div class="card">
-    <div class="card-header">
-      <h4><i class="fas fa-chart-line"></i> Ventas</h4>
-      <div class="total-display">
-        <strong>Total: L. {{ getTotalSales().toFixed(2) }}</strong>
-      </div>
-    </div>
-    <div class="card-body">
-      <div *ngIf="isLoading" class="text-center">
-        <div class="spinner-border" role="status">
-          <span class="sr-only">Cargando...</span>
+  <!-- Contenido Principal -->
+  <div class="main-content">
+    
+    <!-- Cards de Resumen con estilo minimalista -->
+    <div class="summary-cards">
+      <div class="summary-card vendido">
+        <div class="card-icon">
+          <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="card-content">
+          <h3>L {{ getTotalVendido().toFixed(2) }}</h3>
+          <p>Total Vendido</p>
         </div>
       </div>
       
-      <div *ngIf="!isLoading && sales.length > 0; else noSales" class="sales-container">
-        <div class="table-responsive">
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th><i class="fas fa-store"></i> Sucursal</th>
-                <th><i class="fas fa-dice"></i> Sorteo</th>
-                <th><i class="fas fa-clock"></i> Fecha</th>
-                <th><i class="fas fa-dollar-sign"></i> Total</th>
-                <th><i class="fas fa-list-ol"></i> Números</th>
-                <th><i class="fas fa-print"></i> Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let sale of sales">
-                <td>{{ sale.sucursal }}</td>
-                <td>
-                  <span class="badge badge-primary">{{ sale.sorteo | uppercase }}</span>
-                </td>
-                <td>{{ sale.fecha | date:'medium' }}</td>
-                <td class="text-success">
-                  <strong>L. {{ sale.total.toFixed(2) }}</strong>
-                </td>
-                <td>
-                  <div class="numbers-display">
-                    <span *ngFor="let detail of getSaleDetails(sale.id)" 
-                          class="badge badge-info mr-1 mb-1">
-                      Nº {{ detail.numero.toString().padStart(2, '0') }}: L. {{ detail.monto.toFixed(2) }}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <button class="btn btn-sm btn-outline-primary" 
-                          (click)="reprintReceipt(sale)">
-                    <i class="fas fa-print"></i> Reimprimir
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="summary-card pagado">
+        <div class="card-icon">
+          <i class="fas fa-coins"></i>
+        </div>
+        <div class="card-content">
+          <h3>L {{ getTotalPagado().toFixed(2) }}</h3>
+          <p>Total Pagado</p>
+        </div>
+      </div>
+      
+      <div class="summary-card ganancia" [class.positive]="getGananciaNeta() > 0" [class.negative]="getGananciaNeta() < 0">
+        <div class="card-icon">
+          <i class="fas fa-piggy-bank"></i>
+        </div>
+        <div class="card-content">
+          <h3>L {{ getGananciaNeta().toFixed(2) }}</h3>
+          <p>Ganancia Neta</p>
+        </div>
+      </div>
+      
+      <div class="summary-card ventas">
+        <div class="card-icon">
+          <i class="fas fa-shopping-cart"></i>
+        </div>
+        <div class="card-content">
+          <h3>{{ getTotalVentas() }}</h3>
+          <p>Ventas Totales</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección de Sorteos con estilo minimalista -->
+    <div class="sorteos-section">
+      <div class="section-header">
+        <h3><i class="fas fa-dice"></i> Gestión de Sorteos</h3>
+      </div>
+      
+      <div class="sorteos-grid">
+        <div *ngFor="let sorteo of sorteos" class="sorteo-card">
+          <div class="sorteo-header">
+            <h4>{{ sorteo.label }}</h4>
+            <div class="sorteo-status">
+              <span class="status-badge" [class.open]="isSorteoOpen(sorteo)" [class.closed]="!isSorteoOpen(sorteo)">
+                {{ isSorteoOpen(sorteo) ? 'Abierto' : 'Cerrado' }}
+              </span>
+              <span class="close-time">{{ sorteo.closeTime }}</span>
+            </div>
+          </div>
+          
+          <div class="sorteo-content">
+            <div *ngIf="getSorteoData(sorteo)?.numeroGanador; else setWinner">
+              <!-- Resultados del sorteo -->
+              <div class="winner-section">
+                <div class="winner-number">
+                  <i class="fas fa-trophy"></i>
+                  <span>{{ getSorteoData(sorteo)?.numeroGanador }}</span>
+                </div>
+                <div class="factor">Factor: {{ getSorteoData(sorteo)?.factorMultiplicador || 70 }}</div>
+              </div>
+              
+              <div class="sorteo-stats">
+                <div class="stat-item vendido">
+                  <span class="label">Vendido</span>
+                  <span class="value">L {{ getSorteoData(sorteo)?.totalVendido?.toFixed(2) || '0.00' }}</span>
+                </div>
+                <div class="stat-item pagado">
+                  <span class="label">Pagado</span>
+                  <span class="value">L {{ getSorteoData(sorteo)?.totalPagado?.toFixed(2) || '0.00' }}</span>
+                </div>
+                <div class="stat-item ganancia" [class.positive]="(getSorteoData(sorteo)?.gananciaNeta || 0) > 0" 
+                     [class.negative]="(getSorteoData(sorteo)?.gananciaNeta || 0) < 0">
+                  <span class="label">Ganancia</span>
+                  <span class="value">L {{ getSorteoData(sorteo)?.gananciaNeta?.toFixed(2) || '0.00' }}</span>
+                </div>
+              </div>
+            </div>
+            
+            <ng-template #setWinner>
+              <!-- Formulario para establecer ganador -->
+              <div *ngIf="!isSorteoOpen(sorteo)" class="winner-form">
+                <div class="form-group">
+                  <label>Número Ganador:</label>
+                  <input type="number" class="form-input" min="1" max="99" 
+                         [(ngModel)]="winningNumbers[sorteo.name]" [disabled]="isLoading">
+                </div>
+                <div class="form-group">
+                  <label>Factor Multiplicador:</label>
+                  <input type="number" class="form-input" min="1" max="100" step="0.1" 
+                         [(ngModel)]="factorMultiplicador[sorteo.name]" 
+                         [value]="factorMultiplicador[sorteo.name] || 70" [disabled]="isLoading">
+                </div>
+                <button class="btn-set-winner" (click)="setWinningNumber(sorteo)" 
+                        [disabled]="!winningNumbers[sorteo.name] || isLoading">
+                  <i class="fas fa-trophy"></i> Establecer Ganador
+                </button>
+              </div>
+              
+              <div *ngIf="isSorteoOpen(sorteo)" class="sorteo-open-message">
+                <i class="fas fa-clock"></i>
+                <span>Sorteo abierto - Esperando cierre</span>
+              </div>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección de Ventas -->
+    <div class="ventas-section">
+      <div class="section-header">
+        <h3><i class="fas fa-list"></i> Historial de Ventas</h3>
+        <div class="section-actions">
+          <button class="btn-action" (click)="exportarVentasExcel()" [disabled]="isLoading" title="Exportar a Excel">
+            <i class="fas fa-file-excel"></i> Excel
+          </button>
+          <button class="btn-action" (click)="exportarVentasPDF()" [disabled]="isLoading" title="Exportar a PDF">
+            <i class="fas fa-file-pdf"></i> PDF
+          </button>
+        </div>
+      </div>
+      
+      <div class="ventas-table-container" *ngIf="sales.length > 0; else noSales">
+        <div class="ventas-table">
+          <div class="table-header">
+            <div class="col-fecha">Fecha</div>
+            <div class="col-sucursal">Sucursal</div>
+            <div class="col-sorteo">Sorteo</div>
+            <div class="col-total">Total</div>
+            <div class="col-recibo">Recibo</div>
+            <div class="col-acciones">Acciones</div>
+          </div>
+          
+          <div class="table-body">
+            <div *ngFor="let sale of sales; trackBy: trackBySale" class="table-row">
+              <div class="col-fecha">{{ formatDateTime(sale.createdAt) }}</div>
+              <div class="col-sucursal">{{ sale.sucursal }}</div>
+              <div class="col-sorteo">{{ sale.sorteo }}</div>
+              <div class="col-total">L {{ sale.total.toFixed(2) }}</div>
+              <div class="col-recibo">{{ sale.numeroRecibo || sale.id.slice(-6) }}</div>
+              <div class="col-acciones">
+                <button class="btn-table-action" (click)="verDetalles(sale)" title="Ver detalles">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn-table-action" (click)="reprintReceipt(sale)" title="Reimprimir">
+                  <i class="fas fa-print"></i>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
       <ng-template #noSales>
-        <div class="alert alert-info" *ngIf="!isLoading">
-          <i class="fas fa-info-circle"></i> No hay ventas registradas para los filtros seleccionados.
+        <div class="no-data-message">
+          <i class="fas fa-inbox"></i>
+          <h4>No hay ventas para mostrar</h4>
+          <p>Ajusta los filtros para ver diferentes resultados</p>
         </div>
       </ng-template>
     </div>
-  </div>
 
-  <!-- Resumen por Sucursal -->
-  <div class="card mt-4">
-    <div class="card-header">
-      <h4><i class="fas fa-chart-bar"></i> Resumen por Sucursal</h4>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        <div *ngFor="let sucursal of getSucursalSummary()" class="col-md-3 mb-3">
-          <div class="card sucursal-summary">
-            <div class="card-body text-center">
-              <h5>{{ sucursal.name }}</h5>
-              <h3 class="text-success">L. {{ sucursal.total.toFixed(2) }}</h3>
-              <p class="text-muted">{{ sucursal.count }} ventas</p>
+    <!-- Sección de Gestión de Usuarios -->
+    <div class="users-section">
+      <div class="section-header">
+        <h3><i class="fas fa-users"></i> Gestión de Usuarios</h3>
+        <div class="section-actions">
+          <button class="btn-action btn-primary" (click)="createUser()" [disabled]="isLoading">
+            <i class="fas fa-plus"></i> Nuevo Usuario
+          </button>
+        </div>
+      </div>
+      
+      <div class="users-table-container" *ngIf="users.length > 0; else noUsers">
+        <div class="users-table">
+          <div class="table-header">
+            <div class="col-email">Email</div>
+            <div class="col-role">Rol</div>
+            <div class="col-sucursal">Sucursal</div>
+            <div class="col-status">Estado</div>
+            <div class="col-acciones">Acciones</div>
+          </div>
+          
+          <div class="table-body">
+            <div *ngFor="let user of users; trackBy: trackByUser" class="table-row">
+              <div class="col-email">{{ user.email }}</div>
+              <div class="col-role">{{ user.role === 'admin' ? 'Administrador' : 'Sucursal' }}</div>
+              <div class="col-sucursal">{{ user.sucursal || '-' }}</div>
+              <div class="col-status">
+                <span class="status-badge" [class.active]="user.active" [class.inactive]="!user.active">
+                  {{ user.active ? 'Activo' : 'Inactivo' }}
+                </span>
+              </div>
+              <div class="col-acciones">
+                <button class="btn-table-action" (click)="editUser(user)" title="Editar">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-table-action danger" (click)="toggleUserStatus(user)" title="Cambiar estado">
+                  <i class="fas" [class.fa-toggle-on]="user.active" [class.fa-toggle-off]="!user.active"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+      
+      <ng-template #noUsers>
+        <div class="no-data-message">
+          <i class="fas fa-users-slash"></i>
+          <h4>No hay usuarios registrados</h4>
+          <p>Crea el primer usuario para comenzar</p>
+        </div>
+      </ng-template>
     </div>
+
   </div>
 </div>
 
-<!-- Modal de Usuario -->
-<div class="modal fade" [class.show]="showUserModal" [style.display]="showUserModal ? 'block' : 'none'" 
-     tabindex="-1" role="dialog" *ngIf="showUserModal">
-  <div class="modal-dialog" role="document">
+<!-- Modal para crear/editar usuario -->
+<div class="modal" [style.display]="showUserModal ? 'flex' : 'none'" [class.show]="showUserModal">
+  <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
-          <i class="fas fa-user-plus"></i> {{ editingUser ? 'Editar Usuario' : 'Nuevo Usuario' }}
+          <i class="fas fa-user"></i> {{ editingUser ? 'Editar Usuario' : 'Crear Usuario' }}
         </h5>
-        <button type="button" class="btn-close" (click)="closeUserModal()"></button>
+        <button type="button" class="close" (click)="closeUserModal()">
+          <span>&times;</span>
+        </button>
       </div>
       <div class="modal-body">
         <form #userForm="ngForm">
-          <div class="form-group mb-3">
-            <label for="userEmail"><i class="fas fa-envelope"></i> Email:</label>
-            <input type="email" id="userEmail" class="form-control" 
-                   [(ngModel)]="userFormData.email" name="email" required>
+          <div class="form-group">
+            <label for="userEmail">Email:</label>
+            <input type="email" id="userEmail" class="form-input" required
+                   [(ngModel)]="userFormData.email" name="email" 
+                   placeholder="usuario@ejemplo.com">
           </div>
           
-          <div class="form-group mb-3" *ngIf="!editingUser">
-            <label for="userPassword"><i class="fas fa-lock"></i> Contraseña:</label>
-            <input type="password" id="userPassword" class="form-control" 
-                   [(ngModel)]="userFormData.password" name="password" required>
+          <div class="form-group" *ngIf="!editingUser">
+            <label for="userPassword">Contraseña:</label>
+            <input type="password" id="userPassword" class="form-input" required
+                   [(ngModel)]="userFormData.password" name="password" 
+                   placeholder="Contraseña segura">
           </div>
           
-          <div class="form-group mb-3">
-            <label for="userRole"><i class="fas fa-user-tag"></i> Rol:</label>
-            <select id="userRole" class="form-control" 
+          <div class="form-group">
+            <label for="userRole">Rol:</label>
+            <select id="userRole" class="form-input" 
                     [(ngModel)]="userFormData.role" name="role" required>
-              <option value="sucursal">Sucursal</option>
               <option value="admin">Administrador</option>
+              <option value="sucursal">Sucursal</option>
             </select>
           </div>
           
-          <div class="form-group mb-3" *ngIf="userFormData.role === 'sucursal'">
-            <label for="userSucursal"><i class="fas fa-store"></i> Sucursal:</label>
-            <input type="text" id="userSucursal" class="form-control" 
+          <div class="form-group" *ngIf="userFormData.role === 'sucursal'">
+            <label for="userSucursal">Sucursal:</label>
+            <input type="text" id="userSucursal" class="form-input" 
                    [(ngModel)]="userFormData.sucursal" name="sucursal" 
                    placeholder="Nombre de la sucursal">
           </div>
           
-          <div class="form-group mb-3">
-            <div class="form-check">
-              <input type="checkbox" id="userActive" class="form-check-input" 
-                     [(ngModel)]="userFormData.active" name="active">
-              <label for="userActive" class="form-check-label">
-                <i class="fas fa-toggle-on"></i> Usuario Activo
-              </label>
-            </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="userFormData.active" name="active">
+              <span class="checkmark"></span>
+              Usuario Activo
+            </label>
           </div>
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" (click)="closeUserModal()">
+        <button type="button" class="btn-modal btn-secondary" (click)="closeUserModal()">
           <i class="fas fa-times"></i> Cancelar
         </button>
-        <button type="button" class="btn btn-primary" (click)="saveUser()" 
+        <button type="button" class="btn-modal btn-primary" (click)="saveUser()" 
                 [disabled]="!userForm.valid || isLoading">
           <i class="fas fa-save"></i> {{ editingUser ? 'Actualizar' : 'Crear' }}
         </button>
@@ -393,4 +341,3 @@
     </div>
   </div>
 </div>
-<div class="modal-backdrop fade" [class.show]="showUserModal" *ngIf="showUserModal"></div>

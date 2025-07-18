@@ -46,6 +46,15 @@ export class AdminComponent implements OnInit {
   ) {
     const today = new Date();
     this.selectedDate = today.toISOString().split('T')[0];
+    
+    // Inicializar fechas para filtros
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    this.fechaDesde = startOfDay.toISOString().slice(0, 16);
+    
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
+    this.fechaHasta = endOfDay.toISOString().slice(0, 16);
   }
 
   ngOnInit(): void {
@@ -353,10 +362,10 @@ export class AdminComponent implements OnInit {
     this.printService.generateDailyReport(this.sales, reportDate);
   }
 
-  // Método mejorado para reimprimir recibo
+  // Método mejorado para reimprimir recibo desde admin
   async reprintReceipt(sale: Sale): Promise<void> {
     try {
-      console.log('Reimprimiendo recibo para venta:', sale);
+      console.log('Reimprimiendo recibo desde admin para venta:', sale);
       
       // Obtener detalles de la venta desde la base de datos
       const details = await this.supabaseService.getSaleDetails(sale.id);
@@ -364,23 +373,155 @@ export class AdminComponent implements OnInit {
       
       if (details.length === 0) {
         console.warn('No se encontraron detalles para la venta:', sale.id);
-        // Mostrar un mensaje al usuario
-        alert('No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
+        this.notificationService.showError('No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
         return;
       }
       
       // Generar recibo con los detalles obtenidos
       this.printService.generateThermalReceipt(sale, details);
+      this.notificationService.showSuccess('Recibo enviado a impresión');
       
     } catch (error) {
       console.error('Error reimprimiendo recibo:', error);
-      alert('Error al reimprimir el recibo. Por favor intente nuevamente.');
+      this.notificationService.showError('Error al reimprimir el recibo. Por favor intente nuevamente.');
     }
   }
 
   async logout(): Promise<void> {
     await this.supabaseService.logout();
     this.router.navigate(['/login']);
+  }
+
+  // Métodos para el nuevo diseño minimalista
+  formatDateTime(dateInput: string | Date): string {
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    return date.toLocaleString('es-HN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // Métodos faltantes para el template del admin
+  exportarVentas(): void {
+    // Método legacy - ahora llama a Excel por defecto
+    this.exportarVentasExcel();
+  }
+
+  exportarVentasExcel(): void {
+    this.generateVentasReportExcel();
+  }
+
+  exportarVentasPDF(): void {
+    this.generateVentasReportPDF();
+  }
+
+  trackBySale(index: number, sale: Sale): string {
+    return sale.id;
+  }
+
+  trackByUser(index: number, user: any): string {
+    return user.id || index.toString();
+  }
+
+  verDetalles(sale: Sale): void {
+    const details = this.getSaleDetails(sale.id);
+    const numeros = details.map(d => `#${d.numero.toString().padStart(2, '0')} x L${d.monto}`).join(', ');
+    
+    const mensaje = `Detalles de Venta\n\n` +
+                   `Recibo: ${sale.numeroRecibo}\n` +
+                   `Correlativo: ${sale.correlativo}\n` +
+                   `Fecha: ${this.formatDateTime(sale.createdAt)}\n` +
+                   `Sucursal: ${sale.sucursal}\n` +
+                   `Sorteo: ${sale.sorteo}\n` +
+                   `Total: L ${sale.total.toFixed(2)}\n\n` +
+                   `Números: ${numeros}`;
+    
+    alert(mensaje);
+  }
+
+  createUser(): void {
+    this.editingUser = null;
+    this.userFormData = {
+      email: '',
+      password: '',
+      role: 'sucursal',
+      sucursal: '',
+      active: true
+    };
+    this.showUserModal = true;
+  }
+
+  toggleUserStatus(user: any): void {
+    // Implementar cambio de estado del usuario
+    user.active = !user.active;
+    console.log('Cambiando estado del usuario:', user);
+    // Aquí se debería llamar al servicio para actualizar en la BD
+  }
+
+  // Método para generar reporte de ventas en Excel
+  generateVentasReportExcel(): void {
+    if (this.sales.length === 0) {
+      this.notificationService.showError('No hay ventas para exportar');
+      return;
+    }
+
+    try {
+      // Generar CSV
+      let csvContent = 'Fecha,Sucursal,Sorteo,Total,Recibo,Correlativo,Números\n';
+      
+      for (const sale of this.sales) {
+        const details = this.getSaleDetails(sale.id);
+        const numeros = details.map(d => `${d.numero}x${d.monto}`).join(';');
+        csvContent += `"${this.formatDateTime(sale.createdAt)}","${sale.sucursal}","${sale.sorteo}","${sale.total}","${sale.numeroRecibo || sale.id.slice(-6)}","${sale.correlativo}","${numeros}"\n`;
+      }
+
+      // Descargar archivo
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `ventas_excel_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      this.notificationService.showSuccess('Reporte Excel exportado exitosamente');
+    } catch (error) {
+      console.error('Error exportando ventas a Excel:', error);
+      this.notificationService.showError('Error al exportar el reporte Excel');
+    }
+  }
+
+  // Método para generar reporte de ventas en PDF
+  generateVentasReportPDF(): void {
+    if (this.sales.length === 0) {
+      this.notificationService.showError('No hay ventas para exportar');
+      return;
+    }
+
+    try {
+      // Usar el servicio de impresión para generar PDF
+      this.printService.generateVentasReportPDF(this.sales, this.saleDetails, {
+        fechaDesde: this.fechaDesde,
+        fechaHasta: this.fechaHasta,
+        sorteoFilter: this.selectedSorteoFilter
+      });
+      
+      this.notificationService.showSuccess('Reporte PDF generado exitosamente');
+    } catch (error) {
+      console.error('Error exportando ventas a PDF:', error);
+      this.notificationService.showError('Error al exportar el reporte PDF');
+    }
+  }
+
+  // Método para generar reporte de ventas (legacy)
+  generateVentasReport(): void {
+    // Mantener método legacy, ahora llama a Excel
+    this.generateVentasReportExcel();
   }
 
   onFactorChange(sorteoName: string, event: Event): void {

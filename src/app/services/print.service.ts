@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Sale, SaleDetail } from '../models/interfaces';
 
 @Injectable({
@@ -11,7 +12,7 @@ export class PrintService {
 
   // Generar PDF térmico para venta
   generateThermalReceipt(sale: Sale, details: SaleDetail[]): void {
-    console.log('=== GENERANDO RECIBO ===');
+    console.log('=== GENERANDO RECIBO PARA IMPRESIÓN ===');
     console.log('Sale completo:', JSON.stringify(sale, null, 2));
     console.log('Details completo:', JSON.stringify(details, null, 2));
     console.log('Cantidad de detalles:', details ? details.length : 'details es null/undefined');
@@ -26,7 +27,7 @@ export class PrintService {
     }
 
     try {
-      // Crear PDF simple sin configuraciones avanzadas
+      // Crear PDF para impresión térmica
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -47,6 +48,11 @@ export class PrintService {
       pdf.setFontSize(10);
       pdf.text('RECIBO DE VENTA', 40, y, { align: 'center' });
       y += lineHeight + 2;
+
+      // Número de recibo
+      pdf.setFontSize(9);
+      pdf.text(`Recibo #: ${sale.numeroRecibo || 'N/A'}`, 40, y, { align: 'center' });
+      y += lineHeight;
 
       // Línea
       pdf.line(5, y, 75, y);
@@ -105,29 +111,67 @@ export class PrintService {
 
       console.log('Contenido agregado al PDF');
 
-      // Generar archivo
-      const timestamp = Date.now();
-      const fileName = `recibo_${timestamp}.pdf`;
-      
-      console.log('Guardando archivo:', fileName);
-      
-      // Intentar ambas formas
-      pdf.save(fileName);
-      
-      // Crear blob manualmente
+      // FUNCIÓN DE IMPRESIÓN DIRECTA
+      // Crear blob para impresión
       const pdfData = pdf.output('arraybuffer');
       const blob = new Blob([pdfData], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       
-      console.log('Abriendo PDF en nueva ventana...');
-      const newWindow = window.open(url, '_blank');
+      console.log('Iniciando impresión directa...');
       
-      if (!newWindow) {
-        console.warn('Popup bloqueado, descargando directamente');
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
+      // Abrir en nueva ventana para impresión manual controlada por el usuario
+      const printWindow = window.open(url, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+      
+      if (printWindow) {
+        printWindow.onload = () => {
+          // Enfocar la ventana
+          printWindow.focus();
+          
+          // Ejecutar impresión automáticamente
+          setTimeout(() => {
+            try {
+              printWindow.print();
+              console.log('✅ Recibo enviado a impresora');
+            } catch (printError) {
+              console.error('Error al imprimir:', printError);
+            }
+          }, 1000); // Esperar 1 segundo para que cargue completamente
+          
+          // Limpiar URL cuando la ventana se cierre (detección manual)
+          const checkClosed = setInterval(() => {
+            if (printWindow.closed) {
+              clearInterval(checkClosed);
+              URL.revokeObjectURL(url);
+              console.log('Ventana de impresión cerrada por el usuario, URL limpiada');
+            }
+          }, 1000);
+        };
+      } else {
+        console.warn('No se pudo abrir la ventana de impresión, intentando método iframe');
+        
+        // Fallback: usar iframe como respaldo
+        const printFrame = document.createElement('iframe');
+        printFrame.style.display = 'none';
+        printFrame.src = url;
+        
+        document.body.appendChild(printFrame);
+        
+        printFrame.onload = () => {
+          try {
+            printFrame.contentWindow?.focus();
+            printFrame.contentWindow?.print();
+            
+            // Limpiar después de 5 segundos en modo iframe
+            setTimeout(() => {
+              document.body.removeChild(printFrame);
+              URL.revokeObjectURL(url);
+              console.log('iframe de impresión limpiado');
+            }, 5000);
+            
+          } catch (printError) {
+            console.error('Error al imprimir con iframe:', printError);
+          }
+        };
       }
 
     } catch (error: any) {
@@ -147,6 +191,8 @@ export class PrintService {
       sorteo: 'mañana',
       fecha: new Date(),
       total: 50,
+      numeroRecibo: 'SUC-REC-250717-0001',
+      correlativo: 1,
       createdAt: new Date()
     };
 
@@ -206,4 +252,192 @@ export class PrintService {
     
     return summary;
   }
+
+  // Generar reporte de ventas en PDF
+  generateVentasReportPDF(sales: Sale[], saleDetails: { [key: string]: SaleDetail[] }, filters: any): void {
+    try {
+      const doc = new jsPDF();
+      
+      // Header profesional con logo y título
+      doc.setFillColor(52, 73, 94); // Color azul oscuro
+      doc.rect(0, 0, 210, 35, 'F'); // Rectángulo header
+      
+      doc.setTextColor(255, 255, 255); // Texto blanco
+      doc.setFontSize(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SISTEMA DE LOTERÍA', 105, 20, { align: 'center' });
+      
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'normal');
+      doc.text('REPORTE DE VENTAS', 105, 28, { align: 'center' });
+      
+      // Resetear color de texto
+      doc.setTextColor(0, 0, 0);
+      
+      // Información del reporte en formato profesional
+      let yPos = 50;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      
+      // Sección de información general con fondo gris claro
+      doc.setFillColor(248, 249, 250);
+      doc.rect(15, yPos - 5, 180, 40, 'F');
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(15, yPos - 5, 180, 40, 'S');
+      
+      yPos += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('INFORMACIÓN DEL REPORTE', 20, yPos);
+      yPos += 8;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      
+      if (filters.fechaDesde || filters.fechaHasta) {
+        const fechaTexto = filters.fechaDesde && filters.fechaHasta 
+          ? `Período: ${new Date(filters.fechaDesde).toLocaleDateString()} - ${new Date(filters.fechaHasta).toLocaleDateString()}`
+          : filters.fechaDesde 
+            ? `Desde: ${new Date(filters.fechaDesde).toLocaleDateString()}`
+            : `Hasta: ${new Date(filters.fechaHasta).toLocaleDateString()}`;
+        doc.text(fechaTexto, 25, yPos);
+        yPos += 6;
+      }
+      
+      if (filters.sorteoFilter) {
+        doc.text(`Sorteo: ${filters.sorteoFilter}`, 25, yPos);
+        yPos += 6;
+      }
+      
+      const now = new Date();
+      doc.text(`Fecha de generación: ${now.toLocaleDateString()} - ${now.toLocaleTimeString()}`, 25, yPos);
+      yPos += 6;
+      
+      doc.text(`Total de transacciones: ${sales.length}`, 25, yPos);
+      yPos += 20;
+      
+      // Resumen por sucursal en formato tabla
+      const sucursalTotals: { [key: string]: { total: number, count: number } } = {};
+      sales.forEach(sale => {
+        if (!sucursalTotals[sale.sucursal]) {
+          sucursalTotals[sale.sucursal] = { total: 0, count: 0 };
+        }
+        sucursalTotals[sale.sucursal].total += sale.total;
+        sucursalTotals[sale.sucursal].count += 1;
+      });
+      
+      // Header del resumen con estilo
+      doc.setFillColor(52, 73, 94);
+      doc.setTextColor(255, 255, 255);
+      doc.rect(15, yPos - 3, 180, 10, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('RESUMEN POR SUCURSAL', 105, yPos + 3, { align: 'center' });
+      yPos += 15;
+      
+      // Resetear color
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      
+      // Crear mini tabla para resumen
+      Object.entries(sucursalTotals).forEach(([sucursal, data], index) => {
+        const fillColor = index % 2 === 0 ? [245, 245, 245] : [255, 255, 255];
+        doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+        doc.rect(15, yPos - 2, 180, 8, 'F');
+        
+        doc.text(`${sucursal}:`, 25, yPos + 2);
+        doc.text(`${data.count} ventas`, 105, yPos + 2, { align: 'center' });
+        doc.text(`L ${data.total.toFixed(2)}`, 175, yPos + 2, { align: 'right' });
+        yPos += 8;
+      });
+      
+      yPos += 5;
+      
+      // Total general destacado
+      const totalGeneral = sales.reduce((sum, sale) => sum + sale.total, 0);
+      doc.setFillColor(46, 204, 113); // Verde
+      doc.rect(15, yPos - 3, 180, 12, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text(`TOTAL GENERAL: L ${totalGeneral.toFixed(2)}`, 105, yPos + 4, { align: 'center' });
+      yPos += 20;
+      
+      // Resetear para la tabla
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('DETALLE DE VENTAS:', 20, yPos);
+      yPos += 10;
+      
+      // Preparar datos para la tabla
+      const tableData = sales.map(sale => {
+        const details = saleDetails[sale.id] || [];
+        const numerosText = details.map(d => `${d.numero.toString().padStart(2, '0')}xL${d.monto}`).join(', ');
+        
+        // Formatear fecha con hora
+        const saleDate = new Date(sale.createdAt);
+        const fechaHoraStr = `${saleDate.toLocaleDateString()} ${saleDate.toLocaleTimeString('es-ES', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })}`;
+        
+        return [
+          fechaHoraStr,
+          sale.numeroRecibo || sale.id.slice(-6),
+          sale.sucursal,
+          sale.sorteo,
+          numerosText,
+          `L ${sale.total.toFixed(2)}`
+        ];
+      });
+      
+      // Crear tabla con autoTable
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Fecha/Hora', 'Recibo', 'Sucursal', 'Sorteo', 'Números', 'Total']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [66, 139, 202],
+          textColor: 255,
+          fontSize: 10,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        bodyStyles: {
+          fontSize: 9,
+          cellPadding: 3
+        },
+        columnStyles: {
+          0: { cellWidth: 35, halign: 'center' }, // Fecha/Hora (más ancho)
+          1: { cellWidth: 30, halign: 'center' }, // Recibo
+          2: { cellWidth: 25, halign: 'center' }, // Sucursal
+          3: { cellWidth: 20, halign: 'center' }, // Sorteo
+          4: { cellWidth: 45, halign: 'left' },   // Números
+          5: { cellWidth: 25, halign: 'right' }   // Total
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245]
+        },
+        margin: { left: 15, right: 15 },
+        didDrawPage: function(data: any) {
+          // Pie de página
+          doc.setFontSize(8);
+          doc.text(`Página ${data.pageNumber}`, 160, 290);
+          doc.text(`Generado el ${new Date().toLocaleString()}`, 15, 290);
+        }
+      });
+      
+      // Guardar el PDF
+      const fileName = `reporte_ventas_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      
+    } catch (error) {
+      console.error('Error generando PDF:', error);
+      throw error;
+    }
+  }
+
 }

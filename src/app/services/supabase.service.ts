@@ -238,16 +238,101 @@ export class SupabaseService {
   }
 
   // Ventas
+  async getNextCorrelativo(sucursal: string): Promise<number> {
+    try {
+      console.log('=== CALCULANDO SIGUIENTE CORRELATIVO ===');
+      console.log('Sucursal:', sucursal);
+      
+      // Obtener el correlativo más alto para esta sucursal en el día actual
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      console.log('Fecha inicio del día:', startOfDay.toISOString());
+      console.log('Fecha fin del día:', endOfDay.toISOString());
+      
+      // Primero, obtener TODAS las ventas de esta sucursal para debug
+      const { data: allSales, error: allError } = await this.supabase
+        .from('sales')
+        .select('id, correlativo, fecha, created_at')
+        .eq('sucursal', sucursal)
+        .order('created_at', { ascending: false });
+        
+      if (allError) {
+        console.error('Error obteniendo todas las ventas:', allError);
+      } else {
+        console.log('=== TODAS LAS VENTAS DE LA SUCURSAL ===');
+        console.log('Total ventas encontradas:', allSales.length);
+        allSales.forEach((sale, index) => {
+          console.log(`Venta ${index + 1}: ID=${sale.id}, Correlativo=${sale.correlativo}, Fecha=${sale.fecha}, CreatedAt=${sale.created_at}`);
+        });
+      }
+      
+      // Ahora obtener solo las del día actual
+      const { data, error } = await this.supabase
+        .from('sales')
+        .select('correlativo, fecha, created_at')
+        .eq('sucursal', sucursal)
+        .gte('fecha', startOfDay.toISOString())
+        .lte('fecha', endOfDay.toISOString())
+        .order('correlativo', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error obteniendo correlativo del día:', error);
+        throw error;
+      }
+
+      console.log('=== VENTAS DEL DÍA ACTUAL ===');
+      console.log('Ventas del día encontradas:', data.length);
+      if (data.length > 0) {
+        console.log('Venta con correlativo más alto:', data[0]);
+        console.log('Correlativo más alto del día:', data[0].correlativo);
+      } else {
+        console.log('No se encontraron ventas del día actual');
+      }
+
+      const nextCorrelativo = data && data.length > 0 ? (data[0].correlativo || 0) + 1 : 1;
+      console.log('SIGUIENTE CORRELATIVO CALCULADO:', nextCorrelativo);
+      
+      return nextCorrelativo;
+    } catch (error) {
+      console.error('Error calculando correlativo:', error);
+      // En caso de error, usar 1 como fallback
+      return 1;
+    }
+  }
+
   async createSale(sale: Omit<Sale, 'id' | 'createdAt'>): Promise<string> {
     try {
+      // Asegurar que la fecha sea del mismo día actual (timezone local)
+      const now = new Date();
+      const saleDate = new Date(sale.fecha);
+      
+      // Forzar que la fecha de la venta sea hoy en timezone local
+      const todayWithCorrectTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 
+                                          saleDate.getHours(), saleDate.getMinutes(), saleDate.getSeconds());
+
       const saleData = {
         user_id: sale.userId,
         sucursal: sale.sucursal,
         sorteo: sale.sorteo,
-        fecha: sale.fecha,
+        fecha: todayWithCorrectTime.toISOString(),
         total: sale.total,
-        created_at: new Date().toISOString()
+        numero_recibo: sale.numeroRecibo,
+        correlativo: sale.correlativo,
+        created_at: now.toISOString()
       };
+
+      console.log('=== GUARDANDO VENTA ===');
+      console.log('Fecha original:', sale.fecha);
+      console.log('Fecha corregida:', todayWithCorrectTime.toISOString());
+      console.log('Fecha actual:', now.toISOString());
+      console.log('Datos de venta a guardar:', saleData);
+      console.log('Correlativo:', sale.correlativo);
+      console.log('Número de recibo:', sale.numeroRecibo);
 
       const { data, error } = await this.supabase
         .from('sales')
@@ -255,7 +340,13 @@ export class SupabaseService {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error en la base de datos:', error);
+        throw error;
+      }
+
+      console.log('Venta guardada exitosamente:', data);
+      console.log('ID de venta creada:', data.id);
 
       return data.id;
     } catch (error) {
@@ -321,10 +412,18 @@ export class SupabaseService {
 
   async getSalesByDateAndSorteo(fecha: Date, sorteo: string): Promise<Sale[]> {
     try {
+      console.log('=== INICIANDO CONSULTA DE VENTAS ===');
+      console.log('Fecha solicitada:', fecha);
+      console.log('Sorteo filtro:', sorteo || 'TODOS');
+
       const startOfDay = new Date(fecha);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(fecha);
       endOfDay.setHours(23, 59, 59, 999);
+
+      console.log('Rango de consulta:');
+      console.log('Inicio:', startOfDay.toISOString());
+      console.log('Final:', endOfDay.toISOString());
 
       let query = this.supabase
         .from('sales')
@@ -333,25 +432,75 @@ export class SupabaseService {
         .lte('fecha', endOfDay.toISOString())
         .order('created_at', { ascending: false });
 
-      if (sorteo) {
+      if (sorteo && sorteo.trim() !== '') {
+        console.log('Aplicando filtro de sorteo:', sorteo);
         query = query.eq('sorteo', sorteo);
       }
 
+      console.log('Ejecutando consulta...');
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error en consulta Supabase:', error);
+        throw error;
+      }
 
-      return data.map(sale => ({
+      console.log('=== RESULTADOS DE CONSULTA ===');
+      console.log('Cantidad de ventas encontradas:', data?.length || 0);
+      
+      if (!data || data.length === 0) {
+        console.warn('No se encontraron ventas para los criterios especificados');
+        
+        // Hacer una consulta de debug para ver qué hay en la tabla
+        const { data: debugData, error: debugError } = await this.supabase
+          .from('sales')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        
+        if (!debugError && debugData) {
+          console.log('Últimas 5 ventas en la tabla para debug:');
+          debugData.forEach((sale, index) => {
+            console.log(`${index + 1}. ID: ${sale.id}, Fecha: ${sale.fecha}, Sucursal: ${sale.sucursal}`);
+          });
+        }
+        
+        return [];
+      }
+
+      // Log detallado de cada venta encontrada
+      data.forEach((sale, index) => {
+        console.log(`Venta ${index + 1}:`);
+        console.log(`  - ID: ${sale.id}`);
+        console.log(`  - Fecha: ${sale.fecha}`);
+        console.log(`  - Sucursal: ${sale.sucursal}`);
+        console.log(`  - Sorteo: ${sale.sorteo}`);
+        console.log(`  - Total: ${sale.total}`);
+        console.log(`  - Correlativo: ${sale.correlativo}`);
+        console.log(`  - Numero Recibo: ${sale.numero_recibo}`);
+      });
+
+      const mappedSales = data.map(sale => ({
         id: sale.id,
         userId: sale.user_id,
         sucursal: sale.sucursal,
         sorteo: sale.sorteo,
         fecha: new Date(sale.fecha),
         total: sale.total,
+        numeroRecibo: sale.numero_recibo || sale.id.slice(-6),
+        correlativo: sale.correlativo || 0,
         createdAt: new Date(sale.created_at)
       })) as Sale[];
+
+      console.log('=== VENTAS MAPEADAS EXITOSAMENTE ===');
+      console.log('Total de ventas devueltas:', mappedSales.length);
+
+      return mappedSales;
     } catch (error) {
-      console.error('Error obteniendo ventas:', error);
+      console.error('=== ERROR EN getSalesByDateAndSorteo ===');
+      console.error('Error completo:', error);
+      console.error('Fecha:', fecha);
+      console.error('Sorteo:', sorteo);
       return [];
     }
   }
@@ -523,6 +672,150 @@ export class SupabaseService {
     } catch (error) {
       console.error('Error calculando ganancias:', error);
       throw error;
+    }
+  }
+
+  // Método de debug para verificar conexión y datos
+  async debugSalesData(): Promise<void> {
+    try {
+      console.log('=== DEBUG SALES DATA ===');
+      console.log('Supabase URL:', environment.supabase.url);
+      console.log('Fecha actual:', new Date().toISOString());
+
+      // Verificar conexión básica
+      const { data: tablesData, error: tablesError } = await this.supabase
+        .from('sales')
+        .select('count(*)', { count: 'exact', head: true });
+
+      if (tablesError) {
+        console.error('Error verificando tabla sales:', tablesError);
+        return;
+      }
+
+      console.log('Total de ventas en la tabla:', tablesData);
+
+      // Verificar ventas de hoy sin filtros
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      console.log('Rango de fechas para hoy:');
+      console.log('Inicio del día:', startOfDay.toISOString());
+      console.log('Final del día:', endOfDay.toISOString());
+
+      const { data: todayData, error: todayError } = await this.supabase
+        .from('sales')
+        .select('*')
+        .gte('fecha', startOfDay.toISOString())
+        .lte('fecha', endOfDay.toISOString());
+
+      if (todayError) {
+        console.error('Error obteniendo ventas de hoy:', todayError);
+        return;
+      }
+
+      console.log('Ventas encontradas para hoy:', todayData?.length || 0);
+      if (todayData && todayData.length > 0) {
+        console.log('Primera venta encontrada:', todayData[0]);
+      }
+
+      // Verificar ventas de los últimos 3 días
+      const threeDaysAgo = new Date(today);
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      threeDaysAgo.setHours(0, 0, 0, 0);
+
+      const { data: recentData, error: recentError } = await this.supabase
+        .from('sales')
+        .select('*')
+        .gte('fecha', threeDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (recentError) {
+        console.error('Error obteniendo ventas recientes:', recentError);
+        return;
+      }
+
+      console.log('Ventas de los últimos 3 días:', recentData?.length || 0);
+      if (recentData && recentData.length > 0) {
+        console.log('Ventas recientes encontradas:');
+        recentData.forEach((sale, index) => {
+          console.log(`${index + 1}. ID: ${sale.id}, Fecha: ${sale.fecha}, Sucursal: ${sale.sucursal}, Total: ${sale.total}`);
+        });
+      }
+
+    } catch (error) {
+      console.error('Error en debug de datos de ventas:', error);
+    }
+  }
+
+  // Método para verificar permisos y políticas RLS
+  async checkDatabasePermissions(): Promise<void> {
+    try {
+      console.log('=== VERIFICANDO PERMISOS DE BASE DE DATOS ===');
+      
+      // Verificar sesión actual
+      const { data: session, error: sessionError } = await this.supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Error obteniendo sesión:', sessionError);
+        return;
+      }
+      
+      console.log('Usuario autenticado:', session?.session?.user?.id || 'NO AUTENTICADO');
+      console.log('Email del usuario:', session?.session?.user?.email || 'SIN EMAIL');
+      
+      // Probar consulta simple a la tabla sales
+      console.log('Probando consulta simple a tabla sales...');
+      const { data: simpleQuery, error: simpleError } = await this.supabase
+        .from('sales')
+        .select('id, sucursal, created_at')
+        .limit(1);
+      
+      if (simpleError) {
+        console.error('Error en consulta simple:', simpleError);
+        console.error('Código de error:', simpleError.code);
+        console.error('Detalles:', simpleError.details);
+        console.error('Mensaje:', simpleError.message);
+      } else {
+        console.log('Consulta simple exitosa, resultado:', simpleQuery);
+      }
+      
+      // Probar inserción de test (para verificar permisos de escritura)
+      console.log('Probando permisos de escritura...');
+      const testSale = {
+        user_id: session?.session?.user?.id || 'test-user',
+        sucursal: 'TEST',
+        sorteo: 'test',
+        fecha: new Date().toISOString(),
+        total: 0,
+        numero_recibo: 'TEST-001',
+        correlativo: 999
+      };
+      
+      const { data: insertTest, error: insertError } = await this.supabase
+        .from('sales')
+        .insert(testSale)
+        .select();
+      
+      if (insertError) {
+        console.error('Error en inserción de prueba:', insertError);
+      } else {
+        console.log('Inserción de prueba exitosa:', insertTest);
+        
+        // Eliminar el registro de prueba
+        if (insertTest && insertTest.length > 0) {
+          await this.supabase
+            .from('sales')
+            .delete()
+            .eq('id', insertTest[0].id);
+          console.log('Registro de prueba eliminado');
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error verificando permisos:', error);
     }
   }
 }

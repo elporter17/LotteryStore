@@ -1,30 +1,50 @@
-<div class="container">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Sucursal: {{ currentUser?.sucursal }}</h2>
-    <button class="btn btn-danger" (click)="logout()" [disabled]="isLoading">
-      <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+<!-- NUEVA INTERFAZ BASADA EN MOCKUPS -->
+<div class="lottery-interface">
+  <!-- Header -->
+  <div class="header-bar">
+    <button class="btn-header btn-bloquear" (click)="toggleBloqueo()" 
+            [disabled]="isLoading">
+      {{ isBlocked ? 'Desbloquear' : 'Bloquear' }}
+    </button>
+    
+    <!-- Botón de Debug Temporal -->
+    <button class="btn-header" (click)="debugSalesData()" 
+            style="background: rgba(255, 193, 7, 0.2); border-color: rgba(255, 193, 7, 0.3)">
+      Debug DB
+    </button>
+ 
+    <div class="sucursal-title">
+      <h2>{{ currentUser?.sucursal || 'Sucursal 1' }}</h2>
+    </div>
+    
+    <button class="btn-header btn-cerrar" (click)="logout()" [disabled]="isLoading">
+      Cerrar Sesión
     </button>
   </div>
 
-  <div class="card">
-    <h3><i class="fas fa-clock"></i> Sorteo Actual</h3>
-    <div *ngIf="currentSorteo; else noSorteo">
-      <div class="alert alert-info">
-        <strong>{{ currentSorteo.label }}</strong> - 
-        <span *ngIf="isSorteoOpen" class="text-success">
-          <i class="fas fa-check-circle"></i> Abierto (cierra {{ timeUntilClose }})
-        </span>
-        <span *ngIf="!isSorteoOpen" class="text-danger">
-          <i class="fas fa-times-circle"></i> Cerrado
-        </span>
+  <!-- Contenido Principal -->
+  <div class="main-content">
+    
+    <!-- Vista 1: Pantalla Principal con Botón VENTA -->
+    <div *ngIf="selectedNumbers.length === 0" class="venta-screen">
+      <div class="venta-button-container">
+        <button class="btn-venta" 
+                (click)="openNumberModal()" 
+                [disabled]="isLoading || isBlocked || !isSorteoOpen">
+          VENTA
+        </button>
       </div>
       
-      <div *ngIf="isSorteoOpen && !isBlocked" class="row">
-        <!-- Botón para abrir modal de selección -->
-        <div class="col-12 text-center mb-4">
-          <button class="btn btn-primary btn-lg" (click)="openNumberModal()" [disabled]="isLoading">
-            <i class="fas fa-plus-circle"></i> Agregar Número
-          </button>
+      <!-- Info del sorteo -->
+      <div class="sorteo-info" *ngIf="currentSorteo">
+        <div class="alert alert-info">
+          <strong>{{ currentSorteo.label }}</strong> - 
+          <span *ngIf="isSorteoOpen" class="text-success">
+            Abierto (cierra {{ timeUntilClose }})
+          </span>
+          <span *ngIf="!isSorteoOpen" class="text-danger">
+            Cerrado
+          </span>
         </div>
       </div>
       
@@ -33,135 +53,86 @@
         <i class="fas fa-lock"></i> 
         <strong>Venta bloqueada:</strong> Faltan menos de 5 minutos para el cierre del sorteo.
       </div>
+    </div>
+
+    <!-- Vista 2: Tabla de Jugadas -->
+    <div *ngIf="selectedNumbers.length > 0" class="jugadas-screen">
       
-      <div *ngIf="selectedNumbers.length > 0" class="mt-4">
-        <div class="card">
-          <div class="card-header">
-            <h4><i class="fas fa-shopping-cart"></i> Venta Actual</h4>
-          </div>
-          <div class="card-body">
-            <div class="selected-numbers-container">
-              <div *ngFor="let item of selectedNumbers; let i = index" 
-                   class="selected-number-item">
-                <div class="number-info">
-                  <span class="number-badge">{{ item.numero.toString().padStart(2, '0') }}</span>
-                  <span class="amount-text">L. {{ item.monto.toFixed(2) }}</span>
-                </div>
-                <button class="btn btn-danger btn-sm delete-btn" 
-                        (click)="confirmRemoveNumber(i)" [disabled]="isLoading">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-            </div>
-            
-            <div class="total-section mt-3">
-              <div class="total-display">
-                <strong><i class="fas fa-calculator"></i> Total: L. {{ getTotal().toFixed(2) }}</strong>
-              </div>
-              <button class="btn btn-success btn-lg" (click)="processSale()" 
-                      [disabled]="selectedNumbers.length === 0 || isLoading || isBlocked">
-                <i class="fas fa-cash-register"></i> Procesar Venta
+      <!-- Tabla de jugadas -->
+      <div class="jugadas-table">
+        <div class="table-header">
+          <div class="col-numero">#</div>
+          <div class="col-monto">Monto</div>
+          <div class="col-accion"></div>
+        </div>
+        
+        <div class="table-body">
+          <div *ngFor="let item of selectedNumbers; let i = index; trackBy: trackByIndex" 
+               class="table-row">
+            <div class="col-numero">{{ item.numero.toString().padStart(2, '0') }}</div>
+            <div class="col-monto">L {{ item.monto.toFixed(0) }}</div>
+            <div class="col-accion">
+              <button class="btn-remove" (click)="removeNumber(i)" [disabled]="isLoading">
+                ×
               </button>
             </div>
           </div>
         </div>
       </div>
+      
+      <!-- Botón Agregar más números -->
+      <div class="add-more-container">
+        <button class="btn-add-more" 
+                (click)="openNumberModal()" 
+                [disabled]="isLoading || isBlocked">
+          + Agregar Número
+        </button>
+      </div>
+      
+      <!-- Botón PAGAR -->
+      <div class="pagar-container">
+        <button class="btn-pagar" 
+                (click)="processSale()" 
+                [disabled]="selectedNumbers.length === 0 || isLoading || isBlocked">
+          PAGAR
+        </button>
+      </div>
+    </div>
 
-      <!-- Historial de Ventas del Día Actual -->
-      <div *ngIf="recentSales.length > 0" class="mt-4">
-        <div class="card">
-          <div class="card-header">
-            <h4><i class="fas fa-history"></i> Ventas del Día ({{ getTodayDate() }})</h4>
+  </div>
+
+  <!-- Ventas Actuales (siempre visible en la parte inferior) -->
+  <div class="ventas-actuales" *ngIf="recentSales.length > 0">
+    <div class="ventas-header">
+      <h4>Ventas actuales</h4>
+    </div>
+    
+    <div class="ventas-body">
+      <div class="transacciones-header">
+        Transacciones
+      </div>
+      
+      <div *ngFor="let sale of getFilteredSales(); trackBy: trackBySaleId" class="transaccion-item">
+        <div class="transaccion-left">
+          <div class="fecha-hora">{{ formatTime(sale.createdAt) }}</div>
+          <div class="numero-recibo">Recibo: {{ sale.numeroRecibo || sale.id.slice(-6) }}</div>
+          <div class="correlativo">Correlativo: {{ sale.correlativo || 'N/A' }}</div>
+          <div class="numeros-jugados">
+            <span *ngFor="let detail of getSaleDetails(sale.id); trackBy: trackByDetailId" class="numero-small">
+              {{ detail.numero.toString().padStart(2, '0') }} x L{{ detail.monto.toFixed(0) }}
+            </span>
           </div>
-          <div class="card-body">
-            <div class="sales-history-container">
-              <div *ngFor="let sale of getFilteredSales()" class="sale-item">
-                <div class="sale-info">
-                  <div class="sale-header">
-                    <span class="sale-time">
-                      <i class="fas fa-clock"></i> {{ formatTime(sale.createdAt) }}
-                    </span>
-                    <span class="sale-total">
-                      <i class="fas fa-dollar-sign"></i> L. {{ sale.total.toFixed(2) }}
-                    </span>
-                  </div>
-                  <div class="sale-numbers">
-                    <span *ngFor="let detail of getSaleDetails(sale.id)" class="number-badge-small">
-                      {{ detail.numero.toString().padStart(2, '0') }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        </div>
+        <div class="transaccion-right">
+          <div class="total">Total: L{{ sale.total.toFixed(0) }}</div>
+          <button class="btn-reimprimir" (click)="reprintReceipt(sale)">
+            🖨️ Reimprimir
+          </button>
         </div>
       </div>
     </div>
-    
-    <ng-template #noSorteo>
-      <div class="alert alert-warning">
-        <i class="fas fa-exclamation-triangle"></i> No hay sorteo activo en este momento.
-      </div>
-    </ng-template>
   </div>
 
-  <div class="card mt-4">
-    <h3><i class="fas fa-chart-line"></i> Ventas del Día</h3>
-    
-    <div class="row mb-3">
-      <div class="col-md-4">
-        <label><i class="fas fa-calendar"></i> Filtrar por fecha:</label>
-        <input type="date" class="form-control" [(ngModel)]="filterDate" 
-               (change)="onFilterDateChange()" [disabled]="isLoading">
-      </div>
-    </div>
-    
-    <div *ngIf="isLoading" class="text-center">
-      <div class="spinner-border" role="status">
-        <span class="sr-only">Cargando...</span>
-      </div>
-    </div>
-    
-    <div *ngIf="!isLoading && filteredSales.length > 0; else noSales">
-      <div *ngFor="let sale of filteredSales" class="card mb-2">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <h5 class="card-title">
-                <i class="fas fa-ticket-alt"></i> {{ sale.sorteo | uppercase }}
-              </h5>
-              <p class="card-text">
-                <i class="fas fa-clock"></i> {{ sale.fecha | date:'medium' }}
-              </p>
-            </div>
-            <div class="text-right">
-              <h4 class="text-success">L. {{ sale.total.toFixed(2) }}</h4>
-              <button class="btn btn-sm btn-outline-primary" 
-                      (click)="reprintReceipt(sale)">
-                <i class="fas fa-print"></i> Reimprimir
-              </button>
-            </div>
-          </div>
-          <div class="mt-2">
-            <h6><i class="fas fa-list-ol"></i> Números jugados:</h6>
-            <div class="row">
-              <div *ngFor="let detail of getSaleDetails(sale.id)" class="col-md-6 mb-1">
-                <span class="badge badge-info">
-                  Nº {{ detail.numero.toString().padStart(2, '0') }}: L. {{ detail.monto.toFixed(2) }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <ng-template #noSales>
-      <div class="alert alert-info" *ngIf="!isLoading">
-        <i class="fas fa-info-circle"></i> No hay ventas registradas para la fecha seleccionada.
-      </div>
-    </ng-template>
-  </div>
 </div>
 
 <!-- Modal 1: Selección de Número -->

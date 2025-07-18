@@ -1,17 +1,18 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { SupabaseService } from '../../services/supabase.service';
 import { SorteoService } from '../../services/sorteo.service';
 import { NotificationService } from '../../services/notification.service';
 import { PrintService } from '../../services/print.service';
 import { Router } from '@angular/router';
 import { SorteoSchedule, Sale, SaleDetail } from '../../models/interfaces';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-sucursal',
   templateUrl: './sucursal.component.html',
   styleUrls: ['./sucursal.component.scss']
 })
-export class SucursalComponent implements OnInit {
+export class SucursalComponent implements OnInit, OnDestroy {
   currentUser: any = null;
   currentSorteo: SorteoSchedule | null = null;
   timeUntilClose: string = '';
@@ -47,16 +48,26 @@ export class SucursalComponent implements OnInit {
   modalNumberInput: string = '';
   modalAmountInput: string = '';
 
+  // Manejo de suscripciones y timers
+  private userSubscription?: Subscription;
+  private sorteoUpdateInterval?: any;
+  private timeCheckInterval?: any;
+  private isProcessingModal: boolean = false;
+
   constructor(
     private supabaseService: SupabaseService,
     private sorteoService: SorteoService,
     private notificationService: NotificationService,
     public printService: PrintService,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
-    this.supabaseService.currentUser$.subscribe(user => {
+    console.log('[SUCURSAL] ngOnInit iniciado');
+    
+    this.userSubscription = this.supabaseService.currentUser$.subscribe(user => {
+      console.log('[SUCURSAL] Usuario actualizado:', user);
       this.currentUser = user;
       if (!user || user.role !== 'sucursal') {
         this.router.navigate(['/login']);
@@ -66,10 +77,32 @@ export class SucursalComponent implements OnInit {
     this.initializeComponent();
     this.checkTimeRestrictions();
     
-    // Verificar bloqueo cada minuto
-    setInterval(() => {
+    // Verificar bloqueo cada minuto - usar método que se puede limpiar
+    this.timeCheckInterval = setInterval(() => {
       this.checkTimeRestrictions();
     }, 60000);
+    
+    console.log('[SUCURSAL] ngOnInit completado');
+  }
+
+  ngOnDestroy(): void {
+    console.log('[SUCURSAL] ngOnDestroy iniciado - limpiando recursos');
+    
+    // Limpiar suscripciones y timers
+    if (this.userSubscription) {
+      this.userSubscription.unsubscribe();
+      console.log('[SUCURSAL] Suscripción de usuario limpiada');
+    }
+    if (this.sorteoUpdateInterval) {
+      clearInterval(this.sorteoUpdateInterval);
+      console.log('[SUCURSAL] Interval de sorteo limpiado');
+    }
+    if (this.timeCheckInterval) {
+      clearInterval(this.timeCheckInterval);
+      console.log('[SUCURSAL] Interval de tiempo limpiado');
+    }
+    
+    console.log('[SUCURSAL] ngOnDestroy completado');
   }
 
   private async initializeComponent(): Promise<void> {
@@ -82,8 +115,13 @@ export class SucursalComponent implements OnInit {
       await this.loadRecentSales();
       this.setFilterDate();
       
-      // Actualizar cada minuto
-      setInterval(() => {
+      // Limpiar timer anterior si existe
+      if (this.sorteoUpdateInterval) {
+        clearInterval(this.sorteoUpdateInterval);
+      }
+      
+      // Actualizar cada minuto - usar método que se puede limpiar
+      this.sorteoUpdateInterval = setInterval(() => {
         this.updateSorteoInfo();
       }, 60000);
     } catch (error) {
@@ -156,18 +194,29 @@ export class SucursalComponent implements OnInit {
   }
 
   removeNumber(index: number): void {
+    console.log('Eliminando número en índice:', index);
+    console.log('Array antes:', [...this.selectedNumbers]);
+    
     this.selectedNumbers.splice(index, 1);
+    
+    console.log('Array después:', [...this.selectedNumbers]);
+    this.cdr.detectChanges(); // Forzar actualización visual inmediata
   }
 
-  async confirmRemoveNumber(index: number): Promise<void> {
-    const confirmed = await this.notificationService.showConfirmation(
-      '¿Eliminar número?',
-      'Esta acción no se puede deshacer.'
-    );
-
-    if (confirmed) {
-      this.removeNumber(index);
-    }
+  // Generar número de recibo único con correlativo
+  generateReceiptNumber(correlativo: number, sucursal: string): string {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // Últimos 2 dígitos del año
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    
+    // Formato: SUC001-REC-250717-0001
+    const sucursalCode = sucursal.replace(/\s+/g, '').toUpperCase().substring(0, 3);
+    const correlativoFormatted = correlativo.toString().padStart(4, '0');
+    const numeroRecibo = `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`;
+    
+    console.log('Número de recibo generado:', numeroRecibo);
+    return numeroRecibo;
   }
 
   getTotal(): number {
@@ -200,15 +249,30 @@ export class SucursalComponent implements OnInit {
     this.notificationService.showLoading('Procesando venta...');
 
     try {
+      // Obtener el siguiente correlativo para esta sucursal
+      console.log('=== INICIANDO CÁLCULO DE CORRELATIVO ===');
+      console.log('Sucursal:', this.currentUser.sucursal);
+      
+      const correlativo = await this.supabaseService.getNextCorrelativo(this.currentUser.sucursal);
+      console.log('Correlativo obtenido del servicio:', correlativo);
+      
+      // Generar número de recibo con correlativo
+      const numeroRecibo = this.generateReceiptNumber(correlativo, this.currentUser.sucursal);
+      console.log('Número de recibo generado:', numeroRecibo);
+      
       const sale: any = {
         userId: this.currentUser.id,
         sucursal: this.currentUser.sucursal,
         sorteo: this.currentSorteo.name,
         fecha: new Date(),
-        total: this.getTotal()
+        total: this.getTotal(),
+        numeroRecibo: numeroRecibo,
+        correlativo: correlativo
       };
 
-      console.log('Procesando venta:', sale);
+      console.log('=== OBJETO SALE COMPLETO ===');
+      console.log('Sale object:', JSON.stringify(sale, null, 2));
+      console.log('Correlativo en sale:', sale.correlativo);
 
       const saleId = await this.supabaseService.createSale(sale);
 
@@ -249,13 +313,38 @@ export class SucursalComponent implements OnInit {
       
       this.printService.generateThermalReceipt(saleWithId, saleDetails);
 
-      // Limpiar selección
-      this.selectedNumbers = [];
+      // Limpiar selección inmediatamente después de enviar a imprimir
+      setTimeout(async () => {
+        // Limpiar selección inmediatamente
+        this.selectedNumbers = [];
+        
+        // Resetear estado de modales
+        this.showNumberModal = false;
+        this.showAmountModal = false;
+        this.showConfirmModal = false;
+        this.modalNumberInput = '';
+        this.modalAmountInput = '';
+        this.tempNumber = null;
+        this.tempAmount = null;
+        
+        this.cdr.detectChanges(); // Forzar actualización visual inmediata
+        
+        console.log('Selección limpiada, selectedNumbers:', this.selectedNumbers);
+        console.log('Estado de modales reseteado');
+        
+        // Recargar ventas actuales para mostrar la venta recién realizada
+        console.log('Recargando ventas después de la venta...');
+        await this.loadTodaySales();
+        await this.loadRecentSales();
+        
+        console.log('Ventas recargadas después de la venta');
+        console.log('recentSales:', this.recentSales.length);
+        console.log('todaySales:', this.todaySales.length);
+        
+        this.cdr.detectChanges(); // Forzar actualización después de cargar ventas
+      }, 100); // Pequeño retraso para evitar conflictos con la ventana de impresión
       
-      // Recargar ventas
-      await this.loadTodaySales();
-      
-      this.notificationService.showSuccess('Venta procesada exitosamente');
+      this.notificationService.showSuccess('Venta procesada e impresa exitosamente');
     } catch (error) {
       console.error('Error procesando venta:', error);
       this.notificationService.showError('Error al procesar la venta');
@@ -365,18 +454,33 @@ export class SucursalComponent implements OnInit {
 
   // Flujo de modales para selección de números
   openNumberModal(): void {
-    console.log('Abriendo modal de número');
-    if (this.isBlocked) {
-      this.notificationService.showError('Ventas bloqueadas', 'No se pueden realizar ventas en los últimos 5 minutos antes del sorteo');
+    console.log('[MODAL] Intentando abrir modal de número');
+    console.log('[MODAL] Estado actual - isProcessingModal:', this.isProcessingModal, 'isBlocked:', this.isBlocked);
+    
+    if (this.isProcessingModal || this.isBlocked) {
+      console.log('[MODAL] Cancelando apertura - procesando o bloqueado');
+      if (this.isBlocked) {
+        this.notificationService.showError('Ventas bloqueadas', 'No se pueden realizar ventas en los últimos 5 minutos antes del sorteo');
+      }
       return;
     }
+    
+    this.isProcessingModal = true;
+    console.log('[MODAL] Marcando como procesando');
+    
+    // Reiniciar estado de modales
+    this.closeAllModals();
+    
+    // Eliminamos el setTimeout para evitar parpadeo
     this.showNumberModal = true;
     this.modalNumberInput = '';
-    console.log('Modal abierto:', this.showNumberModal);
+    this.cdr.detectChanges();
+    this.isProcessingModal = false;
+    console.log('[MODAL] Modal abierto, estado final:', this.showNumberModal);
   }
 
   closeAllModals(): void {
-    console.log('Cerrando todos los modales');
+    console.log('[MODAL] Cerrando todos los modales');
     this.showNumberModal = false;
     this.showAmountModal = false;
     this.showConfirmModal = false;
@@ -384,6 +488,9 @@ export class SucursalComponent implements OnInit {
     this.modalAmountInput = '';
     this.tempNumber = null;
     this.tempAmount = null;
+    this.isProcessingModal = false;
+    this.cdr.detectChanges(); // Forzar detección de cambios
+    console.log('[MODAL] Todos los modales cerrados');
   }
 
   // Modal 1: Selección de número
@@ -391,6 +498,7 @@ export class SucursalComponent implements OnInit {
     console.log('Presionando número:', num);
     if (this.modalNumberInput.length < 2) {
       this.modalNumberInput += num.toString();
+      this.cdr.detectChanges(); // Forzar actualización de la UI
       console.log('Input actual:', this.modalNumberInput);
     }
   }
@@ -398,22 +506,22 @@ export class SucursalComponent implements OnInit {
   clearModalNumber(): void {
     console.log('Limpiando número');
     this.modalNumberInput = '';
-    // Forzar detección de cambios
-    setTimeout(() => {
-      console.log('Número limpiado, input actual:', this.modalNumberInput);
-    }, 0);
+    this.cdr.detectChanges(); // Forzar actualización inmediata
+    console.log('Número limpiado, input actual:', this.modalNumberInput);
   }
 
   acceptModalNumber(): void {
     console.log('Aceptando número:', this.modalNumberInput);
     
     // Evitar múltiples ejecuciones
-    if (!this.modalNumberInput || this.showAmountModal) {
+    if (!this.modalNumberInput || this.isProcessingModal) {
       if (!this.modalNumberInput) {
         this.notificationService.showError('Número requerido', 'Debe ingresar un número');
       }
       return;
     }
+
+    this.isProcessingModal = true;
 
     // Formatear el número con ceros a la izquierda si es necesario
     let formattedNumber = this.modalNumberInput.padStart(2, '0');
@@ -422,17 +530,16 @@ export class SucursalComponent implements OnInit {
     if (numero >= 0 && numero <= 99) {
       this.tempNumber = numero;
       
-      // Cerrar modal actual y abrir siguiente
+      // Transición suave sin setTimeout
       this.showNumberModal = false;
-      
-      // Usar setTimeout para asegurar que el cambio se aplique
-      setTimeout(() => {
-        this.showAmountModal = true;
-        this.modalAmountInput = '';
-        console.log('Modal de apuesta abierto, número seleccionado:', numero);
-      }, 100);
+      this.showAmountModal = true;
+      this.modalAmountInput = '';
+      this.isProcessingModal = false;
+      this.cdr.detectChanges();
+      console.log('Modal de apuesta abierto, número seleccionado:', numero);
       
     } else {
+      this.isProcessingModal = false;
       this.notificationService.showError('Número inválido', 'El número debe estar entre 00 y 99');
     }
   }
@@ -442,6 +549,7 @@ export class SucursalComponent implements OnInit {
     console.log('Presionando cantidad:', num);
     if (this.modalAmountInput.length < 4) { // Máximo 4 dígitos para el monto
       this.modalAmountInput += num.toString();
+      this.cdr.detectChanges(); // Forzar actualización de la UI
       console.log('Monto actual:', this.modalAmountInput);
     }
   }
@@ -449,26 +557,34 @@ export class SucursalComponent implements OnInit {
   clearModalAmount(): void {
     console.log('Limpiando monto');
     this.modalAmountInput = '';
-    // Forzar detección de cambios
-    setTimeout(() => {
-      console.log('Monto limpiado, input actual:', this.modalAmountInput);
-    }, 0);
+    this.cdr.detectChanges(); // Forzar actualización inmediata
+    console.log('Monto limpiado, input actual:', this.modalAmountInput);
   }
 
   acceptModalAmount(): void {
     console.log('Aceptando monto:', this.modalAmountInput);
-    if (!this.modalAmountInput) {
-      this.notificationService.showError('Monto requerido', 'Debe ingresar un monto');
+    
+    if (!this.modalAmountInput || this.isProcessingModal) {
+      if (!this.modalAmountInput) {
+        this.notificationService.showError('Monto requerido', 'Debe ingresar un monto');
+      }
       return;
     }
+
+    this.isProcessingModal = true;
 
     const monto = parseFloat(this.modalAmountInput);
     if (monto > 0 && monto <= 1000) { // Límite de apuesta
       this.tempAmount = monto;
+      
+      // Transición suave sin setTimeout
       this.showAmountModal = false;
       this.showConfirmModal = true;
+      this.isProcessingModal = false;
+      this.cdr.detectChanges();
       console.log('Pasando a confirmación, monto:', monto);
     } else {
+      this.isProcessingModal = false;
       this.notificationService.showError('Monto inválido', 'El monto debe estar entre 1 y 1000');
     }
   }
@@ -489,8 +605,9 @@ export class SucursalComponent implements OnInit {
         });
       }
       
-      this.notificationService.showSuccess('Número agregado', `Número ${this.tempNumber.toString().padStart(2, '0')} agregado con apuesta de L. ${this.tempAmount}`);
+      // Quitar el modal de confirmación, solo cerrar modales
       this.closeAllModals();
+      this.cdr.detectChanges(); // Forzar actualización final
     }
   }
 
@@ -522,9 +639,9 @@ export class SucursalComponent implements OnInit {
     }
   }
 
-  // Filtrar ventas solo del día actual
+  // Filtrar ventas solo del sorteo actual
   getFilteredSales(): Sale[] {
-    if (!this.recentSales) return [];
+    if (!this.recentSales || !this.currentSorteo) return [];
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -532,7 +649,8 @@ export class SucursalComponent implements OnInit {
     return this.recentSales.filter((sale: Sale) => {
       const saleDate = new Date(sale.createdAt);
       saleDate.setHours(0, 0, 0, 0);
-      return saleDate.getTime() === today.getTime();
+      // Filtrar por día actual Y sorteo actual
+      return saleDate.getTime() === today.getTime() && sale.sorteo === this.currentSorteo?.name;
     });
   }
 
@@ -559,8 +677,15 @@ export class SucursalComponent implements OnInit {
   // Método para cargar ventas recientes (inicializar recentSales)
   async loadRecentSales(): Promise<void> {
     try {
-      // Este método debe cargar las ventas del día actual
-      this.recentSales = this.todaySales;
+      // Asegurar que las ventas del día estén cargadas
+      if (!this.todaySales || this.todaySales.length === 0) {
+        await this.loadTodaySales();
+      }
+      
+      // Asignar las ventas del día como ventas recientes
+      this.recentSales = [...this.todaySales];
+      
+      console.log('Ventas recientes actualizadas:', this.recentSales.length);
     } catch (error) {
       console.error('Error cargando ventas recientes:', error);
       this.recentSales = [];
@@ -572,23 +697,126 @@ export class SucursalComponent implements OnInit {
     try {
       console.log('Reimprimiendo recibo para venta:', sale);
       
+      this.notificationService.showLoading('Reimprimiendo recibo...');
+      
       // Obtener detalles de la venta desde la base de datos
       const details = await this.supabaseService.getSaleDetails(sale.id);
       console.log('Detalles obtenidos de la BD:', details);
       
       if (details.length === 0) {
         console.warn('No se encontraron detalles para la venta:', sale.id);
-        // Mostrar un mensaje al usuario
-        alert('No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
+        this.notificationService.showError('Sin detalles', 'No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
         return;
       }
       
       // Generar recibo con los detalles obtenidos
       this.printService.generateThermalReceipt(sale, details);
       
+      this.notificationService.showSuccess('Recibo reimpreso', `Recibo #${sale.numeroRecibo || sale.id} enviado a impresora`);
+      
     } catch (error) {
       console.error('Error reimprimiendo recibo:', error);
-      alert('Error al reimprimir el recibo. Por favor intente nuevamente.');
+      this.notificationService.showError('Error de reimpresión', 'Error al reimprimir el recibo. Por favor intente nuevamente.');
+    } finally {
+      this.notificationService.hideLoading();
+    }
+  }
+
+  // Funciones de optimización para trackBy
+  trackByIndex(index: number, item: any): number {
+    return index;
+  }
+
+  trackBySaleId(index: number, sale: Sale): string {
+    return sale.id;
+  }
+
+  trackByDetailId(index: number, detail: SaleDetail): string {
+    return detail.id;
+  }
+
+  // Función de debug temporal
+  debugModalState(): void {
+    console.log('=== DEBUG MODAL STATE ===');
+    console.log('showNumberModal:', this.showNumberModal);
+    console.log('showAmountModal:', this.showAmountModal);
+    console.log('showConfirmModal:', this.showConfirmModal);
+    console.log('isProcessingModal:', this.isProcessingModal);
+    console.log('isBlocked:', this.isBlocked);
+    console.log('isLoading:', this.isLoading);
+    console.log('modalNumberInput:', this.modalNumberInput);
+    console.log('modalAmountInput:', this.modalAmountInput);
+    console.log('tempNumber:', this.tempNumber);
+    console.log('tempAmount:', this.tempAmount);
+    console.log('currentUser:', this.currentUser);
+    console.log('========================');
+    
+    // Forzar reinicio completo de los modales
+    this.closeAllModals();
+    
+    alert(`Estado de modales:
+- showNumberModal: ${this.showNumberModal}
+- showAmountModal: ${this.showAmountModal}  
+- showConfirmModal: ${this.showConfirmModal}
+- isProcessingModal: ${this.isProcessingModal}
+- isBlocked: ${this.isBlocked}
+Revisa la consola para más detalles.`);
+  }
+
+  // Función para toggle manual de bloqueo
+  toggleBloqueo(): void {
+    this.isBlocked = !this.isBlocked;
+    const estado = this.isBlocked ? 'bloqueadas' : 'habilitadas';
+    this.notificationService.showInfo('Estado actualizado', `Ventas ${estado} manualmente`);
+    console.log('[SUCURSAL] Bloqueo manual:', this.isBlocked);
+  }
+
+  // Método de debug temporal para verificar conexión con BD
+  async debugSalesData(): Promise<void> {
+    console.log('=== INICIANDO DEBUG DESDE SUCURSAL ===');
+    console.log('Usuario actual:', this.currentUser);
+    
+    try {
+      // Verificar permisos primero
+      console.log('=== VERIFICANDO PERMISOS ===');
+      await this.supabaseService.checkDatabasePermissions();
+      
+      // Llamar al método de debug del servicio
+      console.log('=== DEBUG GENERAL DE DATOS ===');
+      await this.supabaseService.debugSalesData();
+      
+      // Intentar cargar ventas de hoy directamente
+      console.log('=== PROBANDO loadTodaySales ===');
+      await this.loadTodaySales();
+      console.log('Ventas del día cargadas:', this.todaySales.length);
+      console.log('Detalles de ventas cargados:', Object.keys(this.saleDetails).length);
+      
+      // Probar con fechas diferentes
+      console.log('=== PROBANDO FECHAS ESPECÍFICAS ===');
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const yesterdaySales = await this.supabaseService.getSalesByDateAndSorteo(yesterday, '');
+      console.log('Ventas de ayer:', yesterdaySales.length);
+      
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const tomorrowSales = await this.supabaseService.getSalesByDateAndSorteo(tomorrow, '');
+      console.log('Ventas de mañana:', tomorrowSales.length);
+      
+      // Verificar estado de ventas recientes
+      console.log('=== ESTADO DE VENTAS RECIENTES ===');
+      console.log('recentSales length:', this.recentSales.length);
+      console.log('todaySales length:', this.todaySales.length);
+      
+      // Probar refresh forzado
+      console.log('=== PROBANDO REFRESH FORZADO ===');
+      await this.loadRecentSales();
+      console.log('Después del refresh - recentSales:', this.recentSales.length);
+      
+    } catch (error) {
+      console.error('Error en debug de sucursal:', error);
     }
   }
 }

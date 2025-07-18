@@ -14,6 +14,8 @@ export interface Sale {
   sorteo: 'mañana' | 'tarde' | 'noche';
   fecha: Date;
   total: number;
+  numeroRecibo: string; // Número único de recibo
+  correlativo: number; // Correlativo secuencial por sucursal
   createdAt: Date;
 }
 
