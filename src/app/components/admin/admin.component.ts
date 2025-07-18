@@ -17,7 +17,7 @@ export class AdminComponent implements OnInit {
   sales: Sale[] = [];
   saleDetails: { [saleId: string]: SaleDetail[] } = {};
   sorteosData: { [key: string]: Sorteo } = {};
-  winningNumbers: { [key: string]: number } = {};
+  winningNumbers: { [key: string]: string } = {};
   factorMultiplicador: { [key: string]: number } = {};
   selectedSorteoFilter: string = '';
   isLoading: boolean = false;
@@ -71,9 +71,11 @@ export class AdminComponent implements OnInit {
     const hondurasToday = this.supabaseService.getHondurasDateTime();
     this.selectedDate = hondurasToday.toISOString().split('T')[0];
     
-    console.log('=== ADMIN COMPONENT INICIALIZADO CON HONDURAS TIMEZONE ===');
-    console.log('Fecha Honduras:', this.supabaseService.formatHondurasDateTime(hondurasToday));
-    console.log('SelectedDate:', this.selectedDate);
+    
+    // FORZAR CIERRE DE TODOS LOS MODALES AL INICIALIZAR
+    this.showSaleDetailModal = false;
+    this.showUserModal = false;
+    this.showPasswordModal = false;
     
     // Recuperar filtros de localStorage o usar valores por defecto
     this.loadFilterState();
@@ -87,9 +89,6 @@ export class AdminComponent implements OnInit {
       this.fechaHasta = this.formatDateTimeLocal(fechaFin);
     }
     
-    console.log('=== FECHAS INICIALIZADAS CON DATE-FNS ===');
-    console.log('Fecha desde:', this.fechaDesde);
-    console.log('Fecha hasta:', this.fechaHasta);
   }
 
   // Método para cargar estado de filtros desde localStorage
@@ -102,10 +101,8 @@ export class AdminComponent implements OnInit {
         this.fechaHasta = filters.fechaHasta || '';
         this.selectedSorteoFilter = filters.selectedSorteoFilter || '';
         this.selectedDate = filters.selectedDate || '';
-        console.log('=== FILTROS RECUPERADOS DE LOCALSTORAGE ===', filters);
       }
     } catch (error) {
-      console.warn('Error cargando filtros desde localStorage:', error);
     }
   }
 
@@ -119,9 +116,7 @@ export class AdminComponent implements OnInit {
         selectedDate: this.selectedDate
       };
       localStorage.setItem('admin-filters', JSON.stringify(filters));
-      console.log('=== FILTROS GUARDADOS EN LOCALSTORAGE ===', filters);
     } catch (error) {
-      console.warn('Error guardando filtros en localStorage:', error);
     }
   }
 
@@ -135,6 +130,7 @@ export class AdminComponent implements OnInit {
 
     // Cargar datos iniciales
     this.loadSales();
+    this.loadSorteosData(); // Cargar datos de sorteos existentes
     this.initializeUsers();
     this.loadSorteoSchedules(); // Ya no es async
   }
@@ -146,7 +142,6 @@ export class AdminComponent implements OnInit {
       // Cargar usuarios
       await this.loadUsers();
     } catch (error) {
-      console.error('Error inicializando usuarios:', error);
       // Si falla, mostramos usuarios por defecto para que funcione la interfaz
       this.users = [
         {
@@ -184,32 +179,122 @@ export class AdminComponent implements OnInit {
     const closeTime = new Date(now);
     closeTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
-    console.log(`=== VERIFICANDO SORTEO ${sorteo.name.toUpperCase()} ===`);
-    console.log('Hora actual Honduras:', this.supabaseService.formatHondurasDateTime(now));
-    console.log('Hora cierre:', this.supabaseService.formatHondurasDateTime(closeTime));
-    console.log('¿Está abierto?:', now <= closeTime);
     
     return now <= closeTime;
   }
 
   getSorteoData(sorteo: SorteoSchedule): Sorteo | undefined {
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    const todayString = hondurasToday.toDateString();
-    return this.sorteosData[`${todayString}-${sorteo.name}`];
+    const todayString = hondurasToday.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    const sorteoId = `${todayString}-${sorteo.name}`;
+    
+    
+    // SOLO retornar datos reales de la BD, NO crear objetos temporales
+    return this.sorteosData[sorteoId];
+  }
+
+  // Método para verificar si el sorteo está cerrado basado en datos guardados en BD
+  isSorteoCerrado(sorteo: SorteoSchedule): boolean {
+    const sorteoData = this.getSorteoData(sorteo);
+    // Solo considerar cerrado si está marcado como cerrado en BD O si tiene numeroGanador en BD
+    return !!(sorteoData?.cerrado || sorteoData?.numeroGanador);
+  }
+
+  // Método para verificar si hay un número ganador guardado (no temporal)
+  hasSavedWinner(sorteo: SorteoSchedule): boolean {
+    const sorteoData = this.getSorteoData(sorteo);
+    // Solo considerar guardado si hay datos REALES de BD con número ganador
+    return !!(sorteoData?.numeroGanador);
+  }
+
+  // Método para verificar si hay datos temporales en el formulario
+  hasTemporaryWinnerData(sorteo: SorteoSchedule): boolean {
+    return !!(this.winningNumbers[sorteo.name] && !this.hasSavedWinner(sorteo));
+  }
+
+  // Método para cargar un sorteo específico por ID y actualizar la UI
+  async loadSorteoById(sorteoId: string): Promise<void> {
+    try {
+      
+      const sorteo = await this.supabaseService.getSorteoById(sorteoId);
+      
+      if (sorteo) {
+        // Actualizar en sorteosData
+        this.sorteosData[sorteoId] = sorteo;
+        
+        // También actualizar el número ganador local si está disponible
+        const sorteoName = sorteo.sorteo;
+        if (sorteo.numeroGanador) {
+          this.winningNumbers[sorteoName] = sorteo.numeroGanador;
+        }
+        
+        // Forzar actualización de la vista
+        this.cdr.detectChanges();
+      } else {
+      }
+    } catch (error: any) {
+      
+      // Si es error de RLS, intentar método alternativo
+      if (error?.isRLSError || error?.code === '42501') {
+        try {
+          const simpleData = await this.supabaseService.getSorteoByIdSimple(sorteoId);
+          if (simpleData && simpleData.length > 0) {
+            const data = simpleData[0];
+            
+            // Crear objeto Sorteo desde datos simples
+            const sorteo: Sorteo = {
+              id: sorteoId,
+              fecha: data.fecha ? new Date(data.fecha) : new Date(),
+              sorteo: data.sorteo || sorteoId.split('-')[1],
+              horaCierre: data.hora_cierre ? new Date(data.hora_cierre) : new Date(),
+              numeroGanador: data.numero_ganador || '',
+              factorMultiplicador: data.factor_multiplicador || 0,
+              totalVendido: data.total_vendido || 0,
+              totalPagado: data.total_pagado || 0,
+              gananciaNeta: data.ganancia_neta || 0,
+              cerrado: data.cerrado || false
+            };
+            
+            // Actualizar en sorteosData
+            this.sorteosData[sorteoId] = sorteo;
+            
+            // Actualizar número ganador local
+            if (sorteo.numeroGanador) {
+              this.winningNumbers[sorteo.sorteo] = sorteo.numeroGanador;
+            }
+            
+            this.cdr.detectChanges();
+          }
+        } catch (fallbackError) {
+        }
+      }
+    }
+  }
+
+  // Método para refrescar todos los sorteos del día actual
+  async refreshTodaysSorteos(): Promise<void> {
+    try {
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
+      const todayString = hondurasToday.toISOString().split('T')[0];
+      
+      for (const sorteo of this.sorteoSchedules) {
+        const sorteoId = `${todayString}-${sorteo.name}`;
+        await this.loadSorteoById(sorteoId);
+      }
+      
+    } catch (error) {
+    }
   }
 
   async loadSales(): Promise<void> {
     try {
-      this.isLoading = true;
-      console.log('=== CARGANDO VENTAS CON DATE-FNS Y HONDURAS TIMEZONE ===');
-      console.log('FechaDesde:', this.fechaDesde);
-      console.log('FechaHasta:', this.fechaHasta);
-      console.log('SelectedDate:', this.selectedDate);
-      console.log('SelectedSorteoFilter:', this.selectedSorteoFilter);
+      // No cambiar isLoading aquí si ya estamos en modo filtros
+      if (!this.isLoadingFilters) {
+        this.isLoading = true;
+      }
       
       // Si hay filtros de rango de fechas, usar el método de rango
       if (this.fechaDesde && this.fechaHasta) {
-        console.log('=== USANDO FILTRO DE RANGO DE FECHAS ===');
         await this.loadSalesByDateRange();
         return;
       }
@@ -220,15 +305,11 @@ export class AdminComponent implements OnInit {
       if (this.selectedDate) {
         // Si hay fecha seleccionada, usar esa fecha
         fechaParaConsulta = new Date(this.selectedDate);
-        console.log('Usando fecha seleccionada:', this.selectedDate);
       } else {
         // Por defecto, usar hoy
         fechaParaConsulta = this.supabaseService.getHondurasDateTime();
-        console.log('Usando fecha de hoy por defecto');
       }
       
-      console.log('Fecha para consulta:', this.supabaseService.formatHondurasDateTime(fechaParaConsulta));
-      console.log('Filtro de sorteo:', this.selectedSorteoFilter);
       
       // Cargar ventas usando el método existente
       this.sales = await this.supabaseService.getSalesByDateAndSorteo(
@@ -236,7 +317,6 @@ export class AdminComponent implements OnInit {
         this.selectedSorteoFilter
       );
       
-      console.log('Ventas recibidas de Supabase:', this.sales?.length || 0);
       
       // Forzar actualización del array para trigger change detection
       this.sales = [...(this.sales || [])];
@@ -246,17 +326,18 @@ export class AdminComponent implements OnInit {
         this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
       }
       
-      console.log('Ventas procesadas:', this.sales.length);
       
       // Forzar detección de cambios
       this.cdr.detectChanges();
       
     } catch (error) {
-      console.error('Error cargando ventas:', error);
       this.sales = [];
       this.notificationService.showError('Error al cargar las ventas');
     } finally {
-      this.isLoading = false;
+      // Solo cambiar isLoading si no estamos en modo filtros
+      if (!this.isLoadingFilters) {
+        this.isLoading = false;
+      }
     }
   }
 
@@ -270,33 +351,90 @@ export class AdminComponent implements OnInit {
     const multiplicador = this.factorMultiplicador[sorteo.name] || 70;
     
     if (!winningNumber) {
-      alert('Por favor ingrese un número ganador');
+      this.notificationService.showError('Por favor ingrese un número ganador');
+      return;
+    }
+
+    // Verificar autenticación
+    if (!this.currentUser) {
+      this.notificationService.showError('Usuario no autenticado. Por favor inicie sesión nuevamente.');
+      this.router.navigate(['/login']);
       return;
     }
 
     try {
-      const today = new Date();
-      const sorteoId = `${today.toDateString()}-${sorteo.name}`;
+      this.isLoading = true;
       
-      await this.supabaseService.updateSorteoWinner(sorteoId, winningNumber, multiplicador);
+      // Usar fecha de Honduras en lugar de new Date()
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
       
-      // Recalcular totales
-      await this.calculateSorteoResults(sorteo, winningNumber, multiplicador);
+      // Usar formato de fecha más estándar para evitar problemas con caracteres especiales
+      const fechaStr = hondurasToday.toISOString().split('T')[0]; // YYYY-MM-DD
+      const sorteoId = `${fechaStr}-${sorteo.name}`;
       
-      // Recargar datos
       
-      alert('Número ganador establecido correctamente');
+      // Intentar actualizar con múltiples métodos de fallback
+      let success = false;
+      let lastError = null;
+      
+      // Asegurar formato de 2 dígitos para el número ganador
+      const formattedWinningNumber = winningNumber.toString().padStart(2, '0');
+      
+      // Estrategia: Intentar UPDATE primero (más común), luego INSERT si falla
+      try {
+        await this.supabaseService.updateSorteoWinnerDirect(sorteoId, formattedWinningNumber, multiplicador);
+        success = true;
+      } catch (updateError) {
+        
+        // Si el UPDATE falla, puede ser que el registro no exista, intentar INSERT
+        try {
+          await this.supabaseService.insertNewSorteo(sorteoId, formattedWinningNumber, multiplicador);
+          success = true;
+        } catch (insertError) {
+          lastError = insertError;
+          
+          // Último recurso: método simple
+          try {
+            await this.supabaseService.updateSorteoWinnerSimple(sorteoId, formattedWinningNumber, multiplicador);
+            success = true;
+          } catch (simpleError) {
+            lastError = simpleError;
+          }
+        }
+      }
+      
+      if (!success) {
+        throw lastError;
+      }
+      
+      
+      // Recalcular totales y actualizar base de datos
+      await this.calculateSorteoResults(sorteo, formattedWinningNumber, multiplicador);
+      
+      // Recargar datos de ventas y sorteos
+      await this.loadSales();
+      await this.loadSorteosData();
+      
+      // Actualizar la UI específicamente para este sorteo
+      await this.updateSorteoUI(sorteo.name, formattedWinningNumber, multiplicador);
+      
+      this.notificationService.showSuccess(`Número ganador ${formattedWinningNumber} establecido correctamente para ${sorteo.name}`);
+      
     } catch (error) {
-      console.error('Error estableciendo número ganador:', error);
-      alert('Error al establecer el número ganador');
+      
+      // Mostrar el error específico para debugging
+      const errorMessage = (error as any)?.message || 'Error desconocido';
+      const errorCode = (error as any)?.code || 'Sin código';
+      
+      this.notificationService.showError(`Error al establecer el número ganador: ${errorMessage} (Código: ${errorCode})`);
+      
+    } finally {
+      this.isLoading = false;
     }
   }
 
-  private async calculateSorteoResults(sorteo: SorteoSchedule, winningNumber: number, multiplicador: number = 70): Promise<void> {
+  private async calculateSorteoResults(sorteo: SorteoSchedule, winningNumber: string, multiplicador: number = 70): Promise<void> {
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    console.log('=== CALCULANDO RESULTADOS DE SORTEO CON HONDURAS TIMEZONE ===');
-    console.log('Fecha Honduras:', this.supabaseService.formatHondurasDateTime(hondurasToday));
-    console.log('Sorteo:', sorteo.name);
     
     const sorteoSales = await this.supabaseService.getSalesByDateAndSorteo(hondurasToday, sorteo.name);
     
@@ -308,7 +446,7 @@ export class AdminComponent implements OnInit {
       
       const details = await this.supabaseService.getSaleDetails(sale.id);
       for (const detail of details) {
-        if (detail.numero === winningNumber) {
+        if (detail.numero.toString() === winningNumber) {
           totalPagado += detail.monto * multiplicador;
         }
       }
@@ -334,6 +472,89 @@ export class AdminComponent implements OnInit {
     });
   }
 
+  // Método para recargar datos de sorteos desde la base de datos
+  private async loadSorteosData(): Promise<void> {
+    try {
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
+      
+      // Limpiar datos actuales
+      this.sorteosData = {};
+      
+      // Cargar datos de sorteos para cada tipo
+      for (const sorteo of this.sorteos) {
+        try {
+          const sorteoId = `${hondurasToday.toISOString().split('T')[0]}-${sorteo.name}`;
+          const sorteoData = await this.supabaseService.getSorteoById(sorteoId);
+          
+          if (sorteoData) {
+            this.sorteosData[sorteoId] = sorteoData; // Usar sorteoId como clave
+            
+            // Sincronizar con variables locales
+            this.winningNumbers[sorteo.name] = sorteoData.numeroGanador || '';
+            this.factorMultiplicador[sorteo.name] = sorteoData.factorMultiplicador || 70;
+          }
+        } catch (error: any) {
+          
+          // Si es error 406 o RLS, intentar método alternativo
+          if (error?.status === 406 || error?.code === '42501') {
+            // Aquí podrías implementar un método alternativo si tienes uno
+          }
+        }
+      }
+      
+      
+      // Forzar actualización de la UI
+      this.cdr.detectChanges();
+    } catch (error) {
+    }
+  }
+
+  // Método para actualizar la UI específicamente después de establecer ganador
+  private async updateSorteoUI(sorteoName: string, winningNumber: string, multiplicador: number): Promise<void> {
+  try {
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
+    const sorteoId = `${hondurasToday.toISOString().split('T')[0]}-${sorteoName}`;
+
+    // Actualizar datos locales inmediatamente
+    this.winningNumbers[sorteoName] = winningNumber;
+    this.factorMultiplicador[sorteoName] = multiplicador;
+
+    // Intentar cargar datos actualizados desde la base de datos
+    await this.loadSorteoById(sorteoId);
+
+    // Si el sorteo aún no aparece en sorteosData, crear un objeto temporal
+    if (!this.sorteosData[sorteoId]) {
+      this.sorteosData[sorteoId] = {
+        id: sorteoId,
+        fecha: hondurasToday,
+        sorteo: sorteoName,
+        horaCierre: hondurasToday,
+        numeroGanador: winningNumber,
+        factorMultiplicador: multiplicador,
+        totalVendido: 0,
+        totalPagado: 0,
+        gananciaNeta: 0,
+        cerrado: true
+      } as Sorteo;
+    }
+
+    // Forzar detección de cambios para actualizar la UI
+    this.cdr.detectChanges();
+
+    // Después de un breve delay, intentar refrescar nuevamente para asegurar datos actualizados
+    setTimeout(async () => {
+      await this.loadSorteoById(sorteoId);
+    }, 2000);
+
+  } catch (error) {
+    // En caso de error, asegurar que los datos locales estén actualizados
+    this.winningNumbers[sorteoName] = winningNumber;
+    this.factorMultiplicador[sorteoName] = multiplicador;
+    this.cdr.detectChanges();
+  }
+}
+
+
   getTotalSales(): number {
     return this.sales.reduce((total, sale) => total + sale.total, 0);
   }
@@ -355,6 +576,7 @@ export class AdminComponent implements OnInit {
       count: data.count 
     }));
   }
+  
 
   // Métodos para cards de resumen
   getTotalVendido(): number {
@@ -377,11 +599,6 @@ export class AdminComponent implements OnInit {
   async aplicarFiltros(): Promise<void> {
     try {
       this.isLoadingFilters = true;
-      console.log('=== APLICANDO FILTROS CON DATE-FNS ===');
-      console.log('FechaDesde:', this.fechaDesde);
-      console.log('FechaHasta:', this.fechaHasta);
-      console.log('SelectedDate:', this.selectedDate);
-      console.log('Sorteo filtro:', this.selectedSorteoFilter);
       
       // Validar que las fechas sean válidas
       if (this.fechaDesde && this.fechaHasta) {
@@ -390,12 +607,10 @@ export class AdminComponent implements OnInit {
         
         if (fechaDesde > fechaHasta) {
           this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
+          this.isLoadingFilters = false;
           return;
         }
         
-        console.log('=== USANDO FILTRO DE RANGO ===');
-        console.log('Desde:', fechaDesde);
-        console.log('Hasta:', fechaHasta);
       }
       
       // Guardar estado de filtros
@@ -405,17 +620,19 @@ export class AdminComponent implements OnInit {
       await this.loadSales();
       
     } catch (error) {
-      console.error('Error aplicando filtros:', error);
       this.notificationService.showError('Error al aplicar filtros');
     } finally {
-      this.isLoadingFilters = false;
+      // Asegurar que el loading se quite con un pequeño delay
+      setTimeout(() => {
+        this.isLoadingFilters = false;
+        this.cdr.detectChanges();
+      }, 100);
     }
   }
 
   async limpiarFiltros(): Promise<void> {
     try {
       this.isLoadingFilters = true;
-      console.log('=== LIMPIANDO FILTROS CON DATE-FNS ===');
       const hondurasToday = this.supabaseService.getHondurasDateTime();
       
       // Reinicializar fechas usando date-fns
@@ -427,10 +644,6 @@ export class AdminComponent implements OnInit {
       this.selectedDate = hondurasToday.toISOString().split('T')[0];
       this.selectedSorteoFilter = '';
       
-      console.log('Filtros reiniciados:');
-      console.log('- FechaDesde:', this.fechaDesde);
-      console.log('- FechaHasta:', this.fechaHasta);
-      console.log('- SelectedDate:', this.selectedDate);
       
       // Guardar estado limpio
       this.saveFilterState();
@@ -438,17 +651,17 @@ export class AdminComponent implements OnInit {
       await this.loadSales();
       
     } catch (error) {
-      console.error('Error limpiando filtros:', error);
       this.notificationService.showError('Error al limpiar filtros');
     } finally {
-      this.isLoadingFilters = false;
+      // Asegurar que el loading se quite con un pequeño delay
+      setTimeout(() => {
+        this.isLoadingFilters = false;
+        this.cdr.detectChanges();
+      }, 100);
     }
   }
 
   async onFiltroFechaChange(): Promise<void> {
-    console.log('=== CAMBIO EN FILTRO DE FECHA ===');
-    console.log('FechaDesde actual:', this.fechaDesde);
-    console.log('FechaHasta actual:', this.fechaHasta);
     
     // Auto-aplicar filtros cuando cambian las fechas
     await this.aplicarFiltros();
@@ -457,14 +670,11 @@ export class AdminComponent implements OnInit {
   async onDateChange(): Promise<void> {
     try {
       this.isLoadingFilters = true;
-      console.log('=== CAMBIO EN FECHA SELECCIONADA ===');
-      console.log('SelectedDate:', this.selectedDate);
       
       // Guardar cambio de fecha y recargar
       this.saveFilterState();
       await this.loadSales();
     } catch (error) {
-      console.error('Error al cambiar fecha:', error);
       this.notificationService.showError('Error al cambiar la fecha');
     } finally {
       this.isLoadingFilters = false;
@@ -474,14 +684,11 @@ export class AdminComponent implements OnInit {
   async onSorteoFilterChange(): Promise<void> {
     try {
       this.isLoadingFilters = true;
-      console.log('=== CAMBIO EN FILTRO DE SORTEO ===');
-      console.log('SelectedSorteoFilter:', this.selectedSorteoFilter);
       
       // Guardar cambio de sorteo y recargar
       this.saveFilterState();
       await this.loadSales();
     } catch (error) {
-      console.error('Error al cambiar filtro de sorteo:', error);
       this.notificationService.showError('Error al cambiar el filtro de sorteo');
     } finally {
       this.isLoadingFilters = false;
@@ -490,37 +697,30 @@ export class AdminComponent implements OnInit {
 
   // Método específico para cuando cambia fechaDesde
   async onFechaDesdeChange(): Promise<void> {
-    console.log('=== CAMBIO EN FECHA DESDE ===');
-    console.log('Nueva fechaDesde:', this.fechaDesde);
     await this.aplicarFiltros();
   }
 
   // Método específico para cuando cambia fechaHasta
   async onFechaHastaChange(): Promise<void> {
-    console.log('=== CAMBIO EN FECHA HASTA ===');
-    console.log('Nueva fechaHasta:', this.fechaHasta);
     await this.aplicarFiltros();
   }
 
   async loadSalesByDateRange(): Promise<void> {
     if (!this.fechaDesde || !this.fechaHasta) {
-      console.log('No hay fechas de rango definidas, cargando ventas del día');
       await this.loadSingleDateSales();
       return;
     }
 
-    this.isLoading = true;
+    // No cambiar isLoading aquí si ya estamos en modo filtros
+    if (!this.isLoadingFilters) {
+      this.isLoading = true;
+    }
     try {
-      console.log('=== CARGANDO VENTAS POR RANGO CON DATE-FNS ===');
       
       // Usar date-fns para manejar las fechas correctamente
       const fechaDesdeObj = startOfDay(new Date(this.fechaDesde));
       const fechaHastaObj = endOfDay(new Date(this.fechaHasta));
       
-      console.log('Fecha desde (startOfDay):', fechaDesdeObj);
-      console.log('Fecha hasta (endOfDay):', fechaHastaObj);
-      console.log('Formato para mostrar - Desde:', this.supabaseService.formatHondurasDateTime(fechaDesdeObj));
-      console.log('Formato para mostrar - Hasta:', this.supabaseService.formatHondurasDateTime(fechaHastaObj));
       
       // Validar que la fecha desde no sea mayor que la fecha hasta
       if (fechaDesdeObj > fechaHastaObj) {
@@ -536,10 +736,8 @@ export class AdminComponent implements OnInit {
       const maxDays = 31; // Límite de seguridad
       
       while (currentDate <= fechaHastaObj && daysProcessed < maxDays) {
-        console.log(`Cargando ventas para el día: ${this.supabaseService.formatHondurasDateTime(currentDate)}`);
         
         const daySales = await this.supabaseService.getSalesByDateAndSorteo(currentDate, this.selectedSorteoFilter);
-        console.log(`Ventas encontradas para ${currentDate.toDateString()}:`, daySales.length);
         
         allSales = [...allSales, ...daySales];
         
@@ -550,16 +748,12 @@ export class AdminComponent implements OnInit {
       }
 
       if (daysProcessed >= maxDays) {
-        console.warn('Se alcanzó el límite máximo de días procesados (31)');
         this.notificationService.showInfo('Se procesaron los primeros 31 días del rango');
       }
 
       // Forzar actualización del array
       this.sales = [...allSales];
       
-      console.log('=== RESULTADO DEL FILTRO POR RANGO ===');
-      console.log('Total ventas en rango:', this.sales.length);
-      console.log('Días procesados:', daysProcessed);
       
       // Cargar detalles de todas las ventas
       for (const sale of this.sales) {
@@ -569,21 +763,21 @@ export class AdminComponent implements OnInit {
       // Forzar detección de cambios
       this.cdr.detectChanges();
       
-      console.log('=== VENTAS CARGADAS EXITOSAMENTE ===');
       
     } catch (error) {
-      console.error('Error cargando ventas por rango:', error);
       this.notificationService.showError('Error al cargar las ventas: ' + error);
       this.sales = [];
     } finally {
-      this.isLoading = false;
+      // Solo cambiar isLoading si no estamos en modo filtros
+      if (!this.isLoadingFilters) {
+        this.isLoading = false;
+      }
     }
   }
 
   // Método auxiliar para cargar ventas de una sola fecha
   private async loadSingleDateSales(): Promise<void> {
     const fecha = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
-    console.log('Cargando ventas para fecha individual:', this.supabaseService.formatHondurasDateTime(fecha));
     
     this.sales = await this.supabaseService.getSalesByDateAndSorteo(fecha, this.selectedSorteoFilter);
     this.sales = [...(this.sales || [])];
@@ -598,16 +792,12 @@ export class AdminComponent implements OnInit {
   // Gestión de usuarios
   async loadUsers(): Promise<void> {
     try {
-      console.log('Cargando usuarios...');
       this.users = await this.supabaseService.getUsers();
-      console.log('Usuarios cargados exitosamente:', this.users.length);
       
       if (this.users.length === 0) {
-        console.warn('No se encontraron usuarios');
         this.notificationService.showInfo('No hay usuarios configurados. Use el botón Sincronizar para cargar usuarios desde Authentication.');
       }
     } catch (error) {
-      console.error('Error cargando usuarios:', error);
       this.notificationService.showError('Error al cargar usuarios: ' + (error as any)?.message);
       // Asegurar que users no sea undefined
       this.users = [];
@@ -615,15 +805,11 @@ export class AdminComponent implements OnInit {
   }
 
   loadSorteoSchedules(): void {
-    console.log('=== CARGANDO HORARIOS DE SORTEOS DESDE INTERFACES ===');
     this.sorteoSchedules = [...SORTEO_SCHEDULES];
-    console.log('Horarios de sorteos cargados desde interfaces:', this.sorteoSchedules);
     
     if (this.sorteoSchedules.length === 0) {
-      console.warn('No se encontraron horarios de sorteos en las interfaces');
       this.notificationService.showError('No se encontraron horarios de sorteos configurados');
     } else {
-      console.log('✅ Sorteos disponibles:', this.sorteoSchedules.map(s => `${s.label} (${s.closeTime})`));
     }
   }
 
@@ -667,7 +853,6 @@ export class AdminComponent implements OnInit {
       this.closeUserModal();
       await this.loadUsers();
     } catch (error) {
-      console.error('Error guardando usuario:', error);
       this.notificationService.showError('Error al guardar el usuario');
     } finally {
       this.isLoading = false;
@@ -681,7 +866,6 @@ export class AdminComponent implements OnInit {
       this.notificationService.showSuccess('Estado del usuario actualizado');
       await this.loadUsers();
     } catch (error) {
-      console.error('Error cambiando estado del usuario:', error);
       this.notificationService.showError('Error al cambiar el estado del usuario');
     } finally {
       this.isLoading = false;
@@ -698,11 +882,9 @@ export class AdminComponent implements OnInit {
       try {
         this.isLoading = true;
         // Implementar eliminación en SupabaseService
-        console.log('Eliminando usuario:', userId);
         this.notificationService.showSuccess('Usuario eliminado exitosamente');
         await this.loadUsers();
       } catch (error) {
-        console.error('Error eliminando usuario:', error);
         this.notificationService.showError('Error al eliminar el usuario');
       } finally {
         this.isLoading = false;
@@ -712,22 +894,17 @@ export class AdminComponent implements OnInit {
 
   generateDailyReport(): void {
     const reportDate = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
-    console.log('=== GENERANDO REPORTE DIARIO CON HONDURAS TIMEZONE ===');
-    console.log('Fecha del reporte:', this.supabaseService.formatHondurasDateTime(reportDate));
     this.printService.generateDailyReport(this.sales, reportDate);
   }
 
   // Método mejorado para reimprimir recibo desde admin
   async reprintReceipt(sale: Sale): Promise<void> {
     try {
-      console.log('Reimprimiendo recibo desde admin para venta:', sale);
       
       // Obtener detalles de la venta desde la base de datos
       const details = await this.supabaseService.getSaleDetails(sale.id);
-      console.log('Detalles obtenidos de la BD:', details);
       
       if (details.length === 0) {
-        console.warn('No se encontraron detalles para la venta:', sale.id);
         this.notificationService.showError('No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
         return;
       }
@@ -737,7 +914,6 @@ export class AdminComponent implements OnInit {
       this.notificationService.showSuccess('Recibo enviado a impresión');
       
     } catch (error) {
-      console.error('Error reimprimiendo recibo:', error);
       this.notificationService.showError('Error al reimprimir el recibo. Por favor intente nuevamente.');
     }
   }
@@ -806,24 +982,68 @@ export class AdminComponent implements OnInit {
   }
 
   verDetalles(sale: Sale): void {
-    console.log('=== MOSTRANDO DETALLES DE VENTA EN MODAL ===');
-    console.log('Sale:', sale);
+    
+    // Primero cerrar cualquier modal que pueda estar abierto
+    this.showSaleDetailModal = false;
     
     // Obtener detalles de la venta
     const details = this.getSaleDetails(sale.id);
-    console.log('Sale details:', details);
     
     // Configurar modal
     this.selectedSaleForDetail = sale;
     this.selectedSaleDetails = details;
     this.showSaleDetailModal = true;
+    
+    // Forzar detección de cambios
+    this.cdr.detectChanges();
+    
   }
 
   // Método para cerrar el modal de detalles
   closeSaleDetailModal(): void {
+    
     this.showSaleDetailModal = false;
     this.selectedSaleForDetail = null;
     this.selectedSaleDetails = [];
+    
+    // Forzar detección de cambios
+    this.cdr.detectChanges();
+    
+  }
+
+  // Método para forzar el cierre del modal
+  forceCloseSaleDetailModal(): void {
+    this.showSaleDetailModal = false;
+    this.selectedSaleForDetail = null;
+    this.selectedSaleDetails = [];
+  }
+
+  // Método de emergencia para resetear completamente el modal
+  resetModal(): void {
+    
+    // Cerrar TODOS los modales
+    this.showSaleDetailModal = false;
+    this.showUserModal = false;
+    this.showPasswordModal = false;
+    
+    // Limpiar datos de modales
+    this.selectedSaleForDetail = null;
+    this.selectedSaleDetails = [];
+    
+    // Solo si hay elementos trabados, limpiar el DOM
+    setTimeout(() => {
+      // Eliminar backdrop de Bootstrap si existe
+      const backdrops = document.querySelectorAll('.modal-backdrop');
+      backdrops.forEach(el => {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      });
+      
+      // Remover clases del body
+      document.body.classList.remove('modal-open');
+      
+    }, 100);
   }
 
   // Método para calcular total de números en el modal
@@ -879,7 +1099,6 @@ export class AdminComponent implements OnInit {
       this.notificationService.showSuccess('Contraseña actualizada exitosamente');
       this.closePasswordModal();
     } catch (error) {
-      console.error('Error cambiando contraseña:', error);
       this.notificationService.showError('Error al cambiar la contraseña');
     } finally {
       this.isLoading = false;
@@ -917,7 +1136,6 @@ export class AdminComponent implements OnInit {
       
       this.notificationService.showSuccess('Reporte Excel exportado exitosamente');
     } catch (error) {
-      console.error('Error exportando ventas a Excel:', error);
       this.notificationService.showError('Error al exportar el reporte Excel');
     }
   }
@@ -939,7 +1157,6 @@ export class AdminComponent implements OnInit {
       
       this.notificationService.showSuccess('Reporte PDF generado exitosamente');
     } catch (error) {
-      console.error('Error exportando ventas a PDF:', error);
       this.notificationService.showError('Error al exportar el reporte PDF');
     }
   }
@@ -963,10 +1180,9 @@ export class AdminComponent implements OnInit {
   async debugSorteoSchedules(): Promise<void> {
     try {
       this.isLoading = true;
-      await this.supabaseService.debugSorteoSchedules();
+    //  await this.supabaseService.debugSorteoSchedules();
       this.notificationService.showSuccess('Revisa la consola para ver los resultados del debug');
     } catch (error) {
-      console.error('Error en debug:', error);
       this.notificationService.showError('Error ejecutando debug');
     } finally {
       this.isLoading = false;
@@ -1012,7 +1228,6 @@ export class AdminComponent implements OnInit {
       
       this.notificationService.showSuccess('Usuarios sincronizados correctamente');
     } catch (error) {
-      console.error('Error sincronizando usuarios:', error);
       this.notificationService.showError('Error al sincronizar usuarios');
     } finally {
       this.isLoading = false;

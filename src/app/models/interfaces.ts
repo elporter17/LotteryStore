@@ -31,7 +31,7 @@ export interface Sorteo {
   fecha: Date;
   sorteo: 'mañana' | 'tarde' | 'noche';
   horaCierre: Date;
-  numeroGanador?: number;
+  numeroGanador?: string;
   factorMultiplicador: number; // Factor para calcular ganancias (ej: 70)
   totalVendido: number;
   totalPagado: number;

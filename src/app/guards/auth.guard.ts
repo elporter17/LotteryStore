@@ -18,18 +18,14 @@ export class AuthGuard implements CanActivate {
     return this.supabaseService.currentUser$.pipe(
       timeout(8000), // Aumentar timeout a 8 segundos
       map(user => {
-        console.log('AuthGuard - Usuario actual:', user);
         return !!user;
       }),
       tap(isAuthenticated => {
-        console.log('AuthGuard - Autenticado:', isAuthenticated);
         if (!isAuthenticated) {
-          console.log('AuthGuard - Redirigiendo a login');
           this.router.navigate(['/login']);
         }
       }),
       catchError(error => {
-        console.error('AuthGuard - Error o timeout:', error);
         // Dar más tiempo antes de redirigir
         this.router.navigate(['/login']);
         return of(false);

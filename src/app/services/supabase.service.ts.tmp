@@ -1168,7 +1168,47 @@ export class SupabaseService {
   // ========================
   // MÉTODOS DE DEBUG Y SETUP
   // ========================
- 
+
+  async debugSorteoSchedules(): Promise<void> {
+    try {
+      
+      // Primero verificar si la tabla existe consultando directamente
+      const { data: testQuery, error: testError } = await this.supabase
+        .from('sorteo_schedules')
+        .select('*')
+        .limit(1);
+
+      if (testError) {
+        
+        if (testError.message.includes('does not exist')) {
+CREATE TABLE IF NOT EXISTS sorteo_schedules (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    label VARCHAR(100) NOT NULL,
+    close_time VARCHAR(5) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+INSERT INTO sorteo_schedules (name, label, close_time) VALUES
+    ('matutino', 'Matutino', '11:00'),
+    ('vespertino', 'Vespertino', '17:00'),
+    ('nocturno', 'Nocturno', '21:00')
+ON CONFLICT (name) DO NOTHING;
+
+ALTER TABLE sorteo_schedules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access" ON sorteo_schedules
+    FOR SELECT USING (true);
+          `);
+        }
+        return;
+      }
+
+
+    } catch (error) {
+    }
+  }
 
   async initializeSorteoSchedules(): Promise<void> {
     try {

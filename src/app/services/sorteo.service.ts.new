@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { SORTEO_SCHEDULES, SorteoSchedule } from '../models/interfaces';
 import { SupabaseService } from './supabase.service';
 

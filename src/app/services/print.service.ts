@@ -12,14 +12,9 @@ export class PrintService {
 
   // Generar PDF térmico para venta
   generateThermalReceipt(sale: Sale, details: SaleDetail[]): void {
-    console.log('=== GENERANDO RECIBO PARA IMPRESIÓN ===');
-    console.log('Sale completo:', JSON.stringify(sale, null, 2));
-    console.log('Details completo:', JSON.stringify(details, null, 2));
-    console.log('Cantidad de detalles:', details ? details.length : 'details es null/undefined');
 
     // Si no hay detalles, crear datos de prueba
     if (!details || details.length === 0) {
-      console.log('⚠️ No hay detalles, creando datos de prueba');
       details = [
         { id: 'test1', saleId: sale.id, numero: 11, monto: 40 },
         { id: 'test2', saleId: sale.id, numero: 54, monto: 10 }
@@ -34,7 +29,6 @@ export class PrintService {
         format: [80, 150]
       });
 
-      console.log('PDF creado, agregando contenido...');
 
       // Configuración básica
       let y = 10;
@@ -109,7 +103,6 @@ export class PrintService {
       y += lineHeight;
       pdf.text('Mucha suerte!', 40, y, { align: 'center' });
 
-      console.log('Contenido agregado al PDF');
 
       // FUNCIÓN DE IMPRESIÓN DIRECTA
       // Crear blob para impresión
@@ -117,7 +110,6 @@ export class PrintService {
       const blob = new Blob([pdfData], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       
-      console.log('Iniciando impresión directa...');
       
       // Abrir en nueva ventana para impresión manual controlada por el usuario
       const printWindow = window.open(url, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
@@ -131,9 +123,7 @@ export class PrintService {
           setTimeout(() => {
             try {
               printWindow.print();
-              console.log('✅ Recibo enviado a impresora');
             } catch (printError) {
-              console.error('Error al imprimir:', printError);
             }
           }, 1000); // Esperar 1 segundo para que cargue completamente
           
@@ -142,12 +132,10 @@ export class PrintService {
             if (printWindow.closed) {
               clearInterval(checkClosed);
               URL.revokeObjectURL(url);
-              console.log('Ventana de impresión cerrada por el usuario, URL limpiada');
             }
           }, 1000);
         };
       } else {
-        console.warn('No se pudo abrir la ventana de impresión, intentando método iframe');
         
         // Fallback: usar iframe como respaldo
         const printFrame = document.createElement('iframe');
@@ -165,24 +153,20 @@ export class PrintService {
             setTimeout(() => {
               document.body.removeChild(printFrame);
               URL.revokeObjectURL(url);
-              console.log('iframe de impresión limpiado');
             }, 5000);
             
           } catch (printError) {
-            console.error('Error al imprimir con iframe:', printError);
           }
         };
       }
 
     } catch (error: any) {
-      console.error('Error creando PDF:', error);
       alert('Error al generar el recibo: ' + (error?.message || error));
     }
   }
 
   // Método de prueba para generar un recibo con datos fijos
   generateTestReceipt(): void {
-    console.log('=== GENERANDO RECIBO DE PRUEBA ===');
     
     const testSale: Sale = {
       id: 'test-123',
@@ -435,7 +419,6 @@ export class PrintService {
       doc.save(fileName);
       
     } catch (error) {
-      console.error('Error generando PDF:', error);
       throw error;
     }
   }

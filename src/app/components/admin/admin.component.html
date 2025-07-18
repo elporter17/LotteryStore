@@ -1,5 +1,6 @@
 <!-- PANEL DE ADMINISTRACIÓN CON ACORDEÓN -->
 <div class="admin-interface">
+  
   <!-- Header -->
   <div class="header-bar">
     <div class="admin-title">
@@ -14,21 +15,42 @@
   <!-- Filtros de Fecha -->
   <div class="filters-bar">
     <div class="filter-group">
-      <label for="fechaDesde">Desde:</label>
+      <label for="fechaDesde">
+        <i class="fas fa-calendar-alt"></i>
+        Desde:
+        <span class="loading-indicator" *ngIf="isLoadingFilters">
+          <i class="fas fa-spinner fa-spin"></i>
+        </span>
+      </label>
       <input type="datetime-local" id="fechaDesde" class="form-control" 
-             [(ngModel)]="fechaDesde" (change)="onFiltroFechaChange()">
+             [(ngModel)]="fechaDesde" (change)="onFiltroFechaChange()"
+             [disabled]="isLoadingFilters">
     </div>
     
     <div class="filter-group">
-      <label for="fechaHasta">Hasta:</label>
+      <label for="fechaHasta">
+        <i class="fas fa-calendar-alt"></i>
+        Hasta:
+        <span class="loading-indicator" *ngIf="isLoadingFilters">
+          <i class="fas fa-spinner fa-spin"></i>
+        </span>
+      </label>
       <input type="datetime-local" id="fechaHasta" class="form-control" 
-             [(ngModel)]="fechaHasta" (change)="onFiltroFechaChange()">
+             [(ngModel)]="fechaHasta" (change)="onFiltroFechaChange()"
+             [disabled]="isLoadingFilters">
     </div>
     
     <div class="filter-group">
-      <label for="sorteoFilter">Sorteo:</label>
+      <label for="sorteoFilter">
+        <i class="fas fa-trophy"></i>
+        Sorteo:
+        <span class="loading-indicator" *ngIf="isLoadingFilters">
+          <i class="fas fa-spinner fa-spin"></i>
+        </span>
+      </label>
       <select id="sorteoFilter" class="form-control" 
-              [(ngModel)]="selectedSorteoFilter" (change)="aplicarFiltros()">
+              [(ngModel)]="selectedSorteoFilter" (change)="aplicarFiltros()"
+              [disabled]="isLoadingFilters">
         <option value="">Todos los sorteos</option>
         <option *ngFor="let sorteo of sorteos" [value]="sorteo.name">{{ sorteo.label }}</option>
       </select>
@@ -113,12 +135,13 @@
           </div>
           
           <div class="sorteo-content">
-            <div *ngIf="getSorteoData(sorteo)?.numeroGanador; else setWinner">
+            <!-- Mostrar resultados solo si hay datos GUARDADOS en BD -->
+            <div *ngIf="hasSavedWinner(sorteo); else setWinner">
               <!-- Resultados del sorteo -->
               <div class="winner-section">
                 <div class="winner-number">
                   <i class="fas fa-trophy"></i>
-                  <span>{{ getSorteoData(sorteo)?.numeroGanador }}</span>
+                  <span>{{ getSorteoData(sorteo)?.numeroGanador || 'N/A' }}</span>
                 </div>
                 <div class="factor">Factor: {{ getSorteoData(sorteo)?.factorMultiplicador || 70 }}</div>
               </div>
@@ -141,25 +164,32 @@
             </div>
             
             <ng-template #setWinner>
-              <!-- Formulario para establecer ganador -->
+              <!-- Formulario para establecer ganador solo si no está abierto -->
               <div *ngIf="!isSorteoOpen(sorteo)" class="winner-form">
                 <div class="form-group">
                   <label>Número Ganador:</label>
                   <input type="number" class="form-input" min="1" max="99" 
-                         [(ngModel)]="winningNumbers[sorteo.name]" [disabled]="isLoading">
+                         [(ngModel)]="winningNumbers[sorteo.name]" 
+                         [disabled]="isLoading"
+                         placeholder="Ingrese número (1-99)">
                 </div>
                 <div class="form-group">
                   <label>Factor Multiplicador:</label>
                   <input type="number" class="form-input" min="1" max="100" step="0.1" 
                          [(ngModel)]="factorMultiplicador[sorteo.name]" 
-                         [value]="factorMultiplicador[sorteo.name] || 70" [disabled]="isLoading">
+                         [value]="factorMultiplicador[sorteo.name] || 70" 
+                         [disabled]="isLoading"
+                         placeholder="Factor (ej: 70)">
                 </div>
                 <button class="btn-set-winner" (click)="setWinningNumber(sorteo)" 
                         [disabled]="!winningNumbers[sorteo.name] || isLoading">
-                  <i class="fas fa-trophy"></i> Establecer Ganador
+                  <i class="fas fa-trophy"></i> 
+                  <span *ngIf="isLoading">Guardando...</span>
+                  <span *ngIf="!isLoading">Establecer Ganador</span>
                 </button>
               </div>
               
+              <!-- Mensaje cuando el sorteo está abierto -->
               <div *ngIf="isSorteoOpen(sorteo)" class="sorteo-open-message">
                 <i class="fas fa-clock"></i>
                 <span>Sorteo abierto - Esperando cierre</span>
@@ -175,17 +205,25 @@
       <div class="section-header">
         <h3><i class="fas fa-list"></i> Historial de Ventas</h3>
         <div class="section-actions">
-          <button class="btn-action" (click)="exportarVentasExcel()" [disabled]="isLoading" title="Exportar a Excel">
+          <button class="btn-filter btn-primary" (click)="exportarVentasExcel()" [disabled]="isLoading" title="Exportar a Excel">
             <i class="fas fa-file-excel"></i> Excel
           </button>
-          <button class="btn-action" (click)="exportarVentasPDF()" [disabled]="isLoading" title="Exportar a PDF">
+          <button class="btn-filter btn-primary" (click)="exportarVentasPDF()" [disabled]="isLoading" title="Exportar a PDF">
             <i class="fas fa-file-pdf"></i> PDF
           </button>
         </div>
       </div>
       
       <div class="ventas-table-container" *ngIf="sales.length > 0; else noSales">
-        <div class="ventas-table">
+        <!-- Loading overlay para filtros -->
+        <div class="loading-overlay" *ngIf="isLoadingFilters">
+          <div class="loading-content">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>Aplicando filtros...</span>
+          </div>
+        </div>
+        
+        <div class="ventas-table" [class.loading]="isLoadingFilters">
           <div class="table-header">
             <div class="col-fecha">Fecha</div>
             <div class="col-sucursal">Sucursal</div>
@@ -203,10 +241,12 @@
               <div class="col-total">L {{ sale.total.toFixed(2) }}</div>
               <div class="col-recibo">{{ sale.numeroRecibo || sale.id.slice(-6) }}</div>
               <div class="col-acciones">
-                <button class="btn-table-action" (click)="verDetalles(sale)" title="Ver detalles">
+                <button class="btn-table-action" (click)="verDetalles(sale)" title="Ver detalles"
+                        [disabled]="isLoadingFilters">
                   <i class="fas fa-eye"></i>
                 </button>
-                <button class="btn-table-action" (click)="reprintReceipt(sale)" title="Reimprimir">
+                <button class="btn-table-action" (click)="reprintReceipt(sale)" title="Reimprimir"
+                        [disabled]="isLoadingFilters">
                   <i class="fas fa-print"></i>
                 </button>
               </div>
@@ -346,82 +386,87 @@
 </div>
 
 <!-- MODAL DE DETALLES DE VENTA -->
-<div class="modal-overlay" *ngIf="showSaleDetailModal" (click)="closeSaleDetailModal()">
-  <div class="modal-container" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3><i class="fas fa-receipt"></i> Detalles de Venta</h3>
-      <button type="button" class="btn-close" (click)="closeSaleDetailModal()">
-        <i class="fas fa-times"></i>
-      </button>
-    </div>
-    
-    <div class="modal-body" *ngIf="selectedSaleForDetail">
-      <!-- Información General -->
-      <div class="sale-info-grid">
-        <div class="info-row">
-          <span class="label">Recibo:</span>
-          <span class="value">{{ selectedSaleForDetail.numeroRecibo }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Correlativo:</span>
-          <span class="value">{{ selectedSaleForDetail.correlativo }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Fecha:</span>
-          <span class="value">{{ formatDateTime(selectedSaleForDetail.createdAt) }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Sucursal:</span>
-          <span class="value">{{ selectedSaleForDetail.sucursal }}</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Sorteo:</span>
-          <span class="value text-capitalize">{{ selectedSaleForDetail.sorteo }}</span>
-        </div>
-        <div class="info-row total-row">
-          <span class="label">Total:</span>
-          <span class="value">L {{ selectedSaleForDetail.total.toFixed(2) }}</span>
-        </div>
+<div class="modal" [style.display]="showSaleDetailModal ? 'flex' : 'none'" 
+     [class.show]="showSaleDetailModal" 
+     (keydown.escape)="closeSaleDetailModal()"
+     tabindex="0">
+  <div class="modal-dialog modal-dialog-centered" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-receipt"></i> Detalles de Venta</h3>
+        <button type="button" class="btn-close" (click)="closeSaleDetailModal()">
+          <i class="fas fa-times"></i>
+        </button>
       </div>
+      
+      <div class="modal-body" *ngIf="selectedSaleForDetail">
+        <!-- Información General -->
+        <div class="sale-info-grid">
+          <div class="info-row">
+            <span class="label">Recibo:</span>
+            <span class="value">{{ selectedSaleForDetail.numeroRecibo }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Correlativo:</span>
+            <span class="value">{{ selectedSaleForDetail.correlativo }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Fecha:</span>
+            <span class="value">{{ formatDateTime(selectedSaleForDetail.createdAt) }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Sucursal:</span>
+            <span class="value">{{ selectedSaleForDetail.sucursal }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Sorteo:</span>
+            <span class="value text-capitalize">{{ selectedSaleForDetail.sorteo }}</span>
+          </div>
+          <div class="info-row total-row">
+            <span class="label">Total:</span>
+            <span class="value">L {{ selectedSaleForDetail.total.toFixed(2) }}</span>
+          </div>
+        </div>
 
-      <!-- Números Jugados -->
-      <div class="numbers-section" *ngIf="selectedSaleDetails.length > 0">
-        <h4><i class="fas fa-list"></i> Números Jugados</h4>
-        <div class="numbers-grid">
-          <div class="number-item" *ngFor="let detail of selectedSaleDetails; trackBy: trackBySaleDetail">
-            <div class="number-card">
-              <div class="number">{{ detail.numero.toString().padStart(2, '0') }}</div>
-              <div class="amount">L {{ detail.monto.toFixed(2) }}</div>
+        <!-- Números Jugados -->
+        <div class="numbers-section" *ngIf="selectedSaleDetails.length > 0">
+          <h4><i class="fas fa-list"></i> Números Jugados</h4>
+          <div class="numbers-grid">
+            <div class="number-item" *ngFor="let detail of selectedSaleDetails; trackBy: trackBySaleDetail">
+              <div class="number-card">
+                <div class="number">{{ detail.numero.toString().padStart(2, '0') }}</div>
+                <div class="amount">L {{ detail.monto.toFixed(2) }}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="numbers-summary">
+            <div class="summary-item">
+              <span class="label">Cantidad de números:</span>
+              <span class="value">{{ selectedSaleDetails.length }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">Total apostado:</span>
+              <span class="value">L {{ getTotalNumeros().toFixed(2) }}</span>
             </div>
           </div>
         </div>
         
-        <div class="numbers-summary">
-          <div class="summary-item">
-            <span class="label">Cantidad de números:</span>
-            <span class="value">{{ selectedSaleDetails.length }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="label">Total apostado:</span>
-            <span class="value">L {{ getTotalNumeros().toFixed(2) }}</span>
-          </div>
+        <div class="no-numbers" *ngIf="selectedSaleDetails.length === 0">
+          <i class="fas fa-exclamation-triangle"></i>
+          <p>No se encontraron números para esta venta</p>
         </div>
       </div>
       
-      <div class="no-numbers" *ngIf="selectedSaleDetails.length === 0">
-        <i class="fas fa-exclamation-triangle"></i>
-        <p>No se encontraron números para esta venta</p>
+      <div class="modal-footer">
+        <button type="button" class="btn-modal btn-primary" (click)="reprintReceipt(selectedSaleForDetail!)" 
+                [disabled]="isLoading">
+          <i class="fas fa-print"></i> Reimprimir Recibo
+        </button>
+        <button type="button" class="btn-modal btn-secondary" (click)="closeSaleDetailModal()">
+          <i class="fas fa-times"></i> Cerrar
+        </button>
       </div>
-    </div>
-    
-    <div class="modal-footer">
-      <button type="button" class="btn-modal btn-primary" (click)="reprintReceipt(selectedSaleForDetail!)" 
-              [disabled]="isLoading">
-        <i class="fas fa-print"></i> Reimprimir Recibo
-      </button>
-      <button type="button" class="btn-modal btn-secondary" (click)="closeSaleDetailModal()">
-        <i class="fas fa-times"></i> Cerrar
-      </button>
     </div>
   </div>
 </div>

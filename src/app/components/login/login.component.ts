@@ -68,7 +68,6 @@ export class LoginComponent implements OnInit {
     // Verificar si ya hay un usuario logueado con timeout
     this.supabaseService.currentUser$.subscribe(user => {
       if (user) {
-        console.log('Usuario ya logueado, redirigiendo...');
         this.redirectUser(user);
       }
     });
@@ -80,7 +79,6 @@ export class LoginComponent implements OnInit {
     this.notificationService.showLoading('Iniciando sesión...');
 
     try {
-      console.log('Iniciando login desde componente...');
       
       // Usar timeout para evitar que se cuelgue el login
       const timeoutPromise = new Promise((_, reject) => {
@@ -91,17 +89,13 @@ export class LoginComponent implements OnInit {
       
       const user = await Promise.race([loginPromise, timeoutPromise]) as any;
       
-      console.log('Resultado del login:', user);
       
       if (user) {
-        console.log('Usuario logueado exitosamente, redirigiendo...');
         this.redirectUser(user);
       } else {
-        console.log('Login falló - usuario es null');
         this.errorMessage = 'Credenciales inválidas';
       }
     } catch (error: any) {
-      console.error('Error en login:', error);
       this.errorMessage = this.getErrorMessage(error);
     } finally {
       this.isLoading = false;

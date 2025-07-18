@@ -131,6 +131,9 @@
   z-index: 1050;
   overflow-x: hidden;
   overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .modal.fade {
@@ -145,14 +148,9 @@
 .modal-dialog {
   position: relative;
   width: auto;
-  margin: 0.5rem;
+  max-width: 700px;
+  margin: 1rem;
   pointer-events: none;
-}
-
-.modal-dialog-centered {
-  display: flex;
-  align-items: center;
-  min-height: calc(100% - 1rem);
 }
 
 .modal-content {
@@ -160,8 +158,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 500px;
-  margin: 0 auto;
+  max-width: 700px;
   pointer-events: auto;
   background: white;
   border-radius: 12px;
@@ -318,6 +315,29 @@
   font-weight: 500;
   color: #495057;
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  i {
+    color: #3498db;
+    font-size: 0.85rem;
+  }
+}
+
+.loading-indicator {
+  margin-left: auto;
+  color: #3498db;
+  
+  i {
+    font-size: 0.8rem;
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .form-control, .form-input {
@@ -327,6 +347,14 @@
   font-size: 0.9rem;
   transition: all 0.2s ease;
   background: white;
+  
+  &:disabled {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
 }
 
 .form-control:focus, .form-input:focus {
@@ -726,6 +754,44 @@
 
 .ventas-table-container {
   margin-top: 1.5rem;
+  position: relative;
+}
+
+/* Loading overlay para filtros */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 8px;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  
+  i {
+    font-size: 2rem;
+    color: #3498db;
+  }
+  
+  span {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #495057;
+  }
 }
 
 .ventas-table {
@@ -735,6 +801,12 @@
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  transition: opacity 0.3s ease;
+  
+  &.loading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
 }
 
 .table-header {
@@ -775,20 +847,54 @@
 }
 
 .btn-table-action {
-  padding: 0.25rem 0.5rem;
-  background: #3498db;
-  color: white;
+  padding: 0.4rem 0.6rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.2s ease;
-  margin-right: 0.25rem;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+  margin-right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 35px;
+  height: 35px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  
+  &:first-child {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+  }
+  
+  &:last-child {
+    background: linear-gradient(135deg, #27ae60, #219a52);
+    color: white;
+    margin-right: 0;
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+  }
+  
+  i {
+    font-size: 0.9rem;
+  }
 }
 
-.btn-table-action:hover {
-  background: #2980b9;
-  transform: translateY(-1px);
+.btn-table-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  
+  &:first-child {
+    background: linear-gradient(135deg, #2980b9, #21618c);
+  }
+  
+  &:last-child {
+    background: linear-gradient(135deg, #219a52, #1e8449);
+  }
 }
 
 /* ===== CONFIGURACIÓN DE SORTEOS ===== */
@@ -1216,6 +1322,13 @@
 }
 
 /* ===== MODAL DE DETALLES DE VENTA ===== */
+
+/* Modal específico para detalles de venta */
+.modal .modal-content {
+  max-width: 700px;
+  width: 90vw;
+}
+
 .sale-info-grid {
   display: grid;
   gap: 0.75rem;
@@ -1369,4 +1482,55 @@
   .info-row .value {
     font-weight: 600;
   }
+}
+
+/* ===== NUEVOS ESTILOS PARA ESTADO DE CARGA ===== */
+.sorteo-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #6c757d;
+  text-align: center;
+}
+
+.sorteo-loading i {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #007bff;
+  animation: spin 1s linear infinite;
+}
+
+.sorteo-loading span {
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Mejorar el estado disabled de botones */
+.btn-set-winner:disabled {
+  background: #6c757d !important;
+  border-color: #6c757d !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
+.btn-set-winner:disabled:hover {
+  background: #6c757d !important;
+  border-color: #6c757d !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Mejorar inputs disabled */
+.form-input:disabled {
+  background-color: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+  color: #6c757d !important;
+  cursor: not-allowed !important;
 }
