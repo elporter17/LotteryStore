@@ -1,7 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { startOfDay, endOfDay } from 'date-fns';
 import { SupabaseService } from '../../services/supabase.service';
-import { SorteoService } from '../../services/sorteo.service';
 import { NotificationService } from '../../services/notification.service';
 import { PrintService } from '../../services/print.service';
 import { Router } from '@angular/router';
@@ -14,7 +13,7 @@ import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES } from '../.
 })
 export class AdminComponent implements OnInit {
   currentUser: any = null;
-  sorteos = this.sorteoService.getAllSorteos();
+  sorteos = SORTEO_SCHEDULES; // Usar directamente las interfaces en lugar de base de datos
   sales: Sale[] = [];
   saleDetails: { [saleId: string]: SaleDetail[] } = {};
   sorteosData: { [key: string]: Sorteo } = {};
@@ -57,7 +56,6 @@ export class AdminComponent implements OnInit {
 
   constructor(
     private supabaseService: SupabaseService,
-    private sorteoService: SorteoService,
     private notificationService: NotificationService,
     public printService: PrintService,
     private router: Router,
@@ -129,9 +127,10 @@ export class AdminComponent implements OnInit {
       }
     });
 
+    // Cargar datos iniciales
     this.loadSales();
     this.initializeUsers();
-    this.loadSorteoSchedules();
+    this.loadSorteoSchedules(); // Ya no es async
   }
 
   async initializeUsers(): Promise<void> {
@@ -174,7 +173,17 @@ export class AdminComponent implements OnInit {
   }
 
   isSorteoOpen(sorteo: SorteoSchedule): boolean {
-    return this.sorteoService.isSorteoOpen(sorteo);
+    const now = this.supabaseService.getHondurasDateTime();
+    const [hours, minutes] = sorteo.closeTime.split(':');
+    const closeTime = new Date(now);
+    closeTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    console.log(`=== VERIFICANDO SORTEO ${sorteo.name.toUpperCase()} ===`);
+    console.log('Hora actual Honduras:', this.supabaseService.formatHondurasDateTime(now));
+    console.log('Hora cierre:', this.supabaseService.formatHondurasDateTime(closeTime));
+    console.log('¿Está abierto?:', now <= closeTime);
+    
+    return now <= closeTime;
   }
 
   getSorteoData(sorteo: SorteoSchedule): Sorteo | undefined {
@@ -565,19 +574,16 @@ export class AdminComponent implements OnInit {
     }
   }
 
-  async loadSorteoSchedules(): Promise<void> {
-    try {
-      console.log('Iniciando carga de horarios de sorteos...');
-      this.sorteoSchedules = [...SORTEO_SCHEDULES];
-      console.log('Horarios de sorteos cargados:', this.sorteoSchedules);
-      
-      if (this.sorteoSchedules.length === 0) {
-        console.warn('No se encontraron horarios de sorteos en la base de datos');
-        this.notificationService.showError('No se encontraron horarios de sorteos configurados');
-      }
-    } catch (error) {
-      console.error('Error cargando horarios de sorteos:', error);
-      this.notificationService.showError('Error al cargar los horarios de sorteos');
+  loadSorteoSchedules(): void {
+    console.log('=== CARGANDO HORARIOS DE SORTEOS DESDE INTERFACES ===');
+    this.sorteoSchedules = [...SORTEO_SCHEDULES];
+    console.log('Horarios de sorteos cargados desde interfaces:', this.sorteoSchedules);
+    
+    if (this.sorteoSchedules.length === 0) {
+      console.warn('No se encontraron horarios de sorteos en las interfaces');
+      this.notificationService.showError('No se encontraron horarios de sorteos configurados');
+    } else {
+      console.log('✅ Sorteos disponibles:', this.sorteoSchedules.map(s => `${s.label} (${s.closeTime})`));
     }
   }
 
