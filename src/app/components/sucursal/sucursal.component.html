@@ -2,10 +2,10 @@
 <div class="lottery-interface">
   <!-- Header -->
   <div class="header-bar">
-    <button class="btn-header btn-bloquear" (click)="toggleBloqueo()" 
-            [disabled]="isLoading">
-      {{ isBlocked ? 'Desbloquear' : 'Bloquear' }}
-    </button>
+    <div class="time-display">
+      <span class="time-label">Hora Honduras:</span>
+      <span class="time-value">{{ currentHondurasTime }}</span>
+    </div>
     
     <div class="sucursal-title">
       <h2>{{ currentUser?.sucursal || 'Sucursal 1' }}</h2>

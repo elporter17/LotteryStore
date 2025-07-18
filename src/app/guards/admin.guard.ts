@@ -16,16 +16,17 @@ export class AdminGuard implements CanActivate {
 
   canActivate(): Observable<boolean> {
     return this.supabaseService.currentUser$.pipe(
-      timeout(5000), // 5 segundos timeout
+      timeout(8000), // Aumentar timeout a 8 segundos
       map(user => {
         console.log('AdminGuard - Usuario actual:', user);
-        return user?.role === 'admin';
+        const isAdmin = user?.role === 'admin';
+        console.log('AdminGuard - Es admin:', isAdmin, 'Role:', user?.role);
+        return isAdmin;
       }),
       tap(isAdmin => {
-        console.log('AdminGuard - Es admin:', isAdmin);
         if (!isAdmin) {
-          console.log('AdminGuard - Redirigiendo a login');
-          this.router.navigate(['/login']);
+          console.log('AdminGuard - No es admin, redirigiendo a sucursal');
+          this.router.navigate(['/sucursal']);
         }
       }),
       catchError(error => {

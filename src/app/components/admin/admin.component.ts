@@ -37,6 +37,26 @@ export class AdminComponent implements OnInit {
     active: true
   };
 
+  // Propiedades para gestión de sorteos
+  showSorteoModal: boolean = false;
+  editingSorteo: any = null;
+  sorteoFormData: any = {
+    name: '',
+    label: '',
+    close_time: ''
+  };
+  sorteoSchedules: any[] = [];
+
+  // Propiedades para cambio de contraseña
+  showPasswordModal: boolean = false;
+  selectedUserForPassword: any = null;
+  newPassword: string = '';
+  confirmPassword: string = '';
+
+  // Propiedades para acordeón
+  showSorteosSection: boolean = false;
+  showUsersSection: boolean = false;
+
   constructor(
     private supabaseService: SupabaseService,
     private sorteoService: SorteoService,
@@ -44,15 +64,19 @@ export class AdminComponent implements OnInit {
     public printService: PrintService,
     private router: Router
   ) {
-    const today = new Date();
-    this.selectedDate = today.toISOString().split('T')[0];
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
+    this.selectedDate = hondurasToday.toISOString().split('T')[0];
     
-    // Inicializar fechas para filtros
-    const startOfDay = new Date(today);
+    console.log('=== ADMIN COMPONENT INICIALIZADO CON HONDURAS TIMEZONE ===');
+    console.log('Fecha Honduras:', this.supabaseService.formatHondurasDateTime(hondurasToday));
+    console.log('SelectedDate:', this.selectedDate);
+    
+    // Inicializar fechas para filtros usando Honduras timezone
+    const startOfDay = new Date(hondurasToday);
     startOfDay.setHours(0, 0, 0, 0);
     this.fechaDesde = startOfDay.toISOString().slice(0, 16);
     
-    const endOfDay = new Date(today);
+    const endOfDay = new Date(hondurasToday);
     endOfDay.setHours(23, 59, 59, 999);
     this.fechaHasta = endOfDay.toISOString().slice(0, 16);
   }
@@ -66,8 +90,47 @@ export class AdminComponent implements OnInit {
     });
 
     this.loadSales();
-    this.loadSorteosData();
-    this.loadUsers();
+    this.initializeUsers();
+    this.loadSorteoSchedules();
+  }
+
+  async initializeUsers(): Promise<void> {
+    try {
+      // Inicializar la tabla de perfiles
+      await this.supabaseService.initializeProfilesTable();
+      // Cargar usuarios
+      await this.loadUsers();
+    } catch (error) {
+      console.error('Error inicializando usuarios:', error);
+      // Si falla, mostramos usuarios por defecto para que funcione la interfaz
+      this.users = [
+        {
+          id: '1',
+          email: 'admin@loteria.com',
+          role: 'admin',
+          sucursal: '',
+          active: true,
+          createdAt: new Date()
+        },
+        {
+          id: '2',
+          email: 'sucursal1@loteria.com',
+          role: 'sucursal',
+          sucursal: 'Sucursal 1',
+          active: true,
+          createdAt: new Date()
+        },
+        {
+          id: '3',
+          email: 'sucursal2@loteria.com',
+          role: 'sucursal',
+          sucursal: 'Sucursal 2',
+          active: false,
+          createdAt: new Date()
+        }
+      ];
+      this.notificationService.showError('No se pudieron cargar usuarios de la base de datos. Mostrando datos de ejemplo.');
+    }
   }
 
   isSorteoOpen(sorteo: SorteoSchedule): boolean {
@@ -75,14 +138,21 @@ export class AdminComponent implements OnInit {
   }
 
   getSorteoData(sorteo: SorteoSchedule): Sorteo | undefined {
-    const today = new Date().toDateString();
-    return this.sorteosData[`${today}-${sorteo.name}`];
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
+    const todayString = hondurasToday.toDateString();
+    return this.sorteosData[`${todayString}-${sorteo.name}`];
   }
 
   async loadSales(): Promise<void> {
     try {
-      const selectedDateObj = this.selectedDate ? new Date(this.selectedDate) : new Date();
+      console.log('=== CARGANDO VENTAS CON HONDURAS TIMEZONE ===');
+      const selectedDateObj = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
+      console.log('Fecha seleccionada:', this.supabaseService.formatHondurasDateTime(selectedDateObj));
+      console.log('Filtro de sorteo:', this.selectedSorteoFilter);
+      
       this.sales = await this.supabaseService.getSalesByDateAndSorteo(selectedDateObj, this.selectedSorteoFilter);
+      
+      console.log('Ventas cargadas:', this.sales.length);
       
       // Cargar detalles de cada venta
       for (const sale of this.sales) {
@@ -93,19 +163,6 @@ export class AdminComponent implements OnInit {
     }
   }
 
-  async loadSorteosData(): Promise<void> {
-    try {
-      const today = new Date();
-      for (const sorteo of this.sorteos) {
-        const sorteoData = await this.supabaseService.getSorteo(today, sorteo.name);
-        if (sorteoData) {
-          this.sorteosData[sorteoData.id] = sorteoData;
-        }
-      }
-    } catch (error) {
-      console.error('Error cargando datos de sorteos:', error);
-    }
-  }
 
   getSaleDetails(saleId: string): SaleDetail[] {
     return this.saleDetails[saleId] || [];
@@ -130,7 +187,6 @@ export class AdminComponent implements OnInit {
       await this.calculateSorteoResults(sorteo, winningNumber, multiplicador);
       
       // Recargar datos
-      await this.loadSorteosData();
       
       alert('Número ganador establecido correctamente');
     } catch (error) {
@@ -140,8 +196,12 @@ export class AdminComponent implements OnInit {
   }
 
   private async calculateSorteoResults(sorteo: SorteoSchedule, winningNumber: number, multiplicador: number = 70): Promise<void> {
-    const today = new Date();
-    const sorteoSales = await this.supabaseService.getSalesByDateAndSorteo(today, sorteo.name);
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
+    console.log('=== CALCULANDO RESULTADOS DE SORTEO CON HONDURAS TIMEZONE ===');
+    console.log('Fecha Honduras:', this.supabaseService.formatHondurasDateTime(hondurasToday));
+    console.log('Sorteo:', sorteo.name);
+    
+    const sorteoSales = await this.supabaseService.getSalesByDateAndSorteo(hondurasToday, sorteo.name);
     
     let totalVendido = 0;
     let totalPagado = 0;
@@ -165,7 +225,7 @@ export class AdminComponent implements OnInit {
     horaCierre.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
     await this.supabaseService.createOrUpdateSorteo({
-      fecha: today,
+      fecha: hondurasToday,
       sorteo: sorteo.name,
       horaCierre,
       numeroGanador: winningNumber,
@@ -229,11 +289,13 @@ export class AdminComponent implements OnInit {
   }
 
   limpiarFiltros(): void {
-    const today = new Date();
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
     this.fechaDesde = '';
     this.fechaHasta = '';
-    this.selectedDate = today.toISOString().split('T')[0];
+    this.selectedDate = hondurasToday.toISOString().split('T')[0];
     this.selectedSorteoFilter = '';
+    console.log('=== FILTROS LIMPIADOS CON HONDURAS TIMEZONE ===');
+    console.log('Nueva fecha seleccionada:', this.selectedDate);
     this.loadSales();
   }
 
@@ -277,11 +339,35 @@ export class AdminComponent implements OnInit {
   // Gestión de usuarios
   async loadUsers(): Promise<void> {
     try {
-      // Implementar método en SupabaseService para cargar usuarios
-      // this.users = await this.supabaseService.getUsers();
       console.log('Cargando usuarios...');
+      this.users = await this.supabaseService.getUsers();
+      console.log('Usuarios cargados exitosamente:', this.users.length);
+      
+      if (this.users.length === 0) {
+        console.warn('No se encontraron usuarios');
+        this.notificationService.showInfo('No hay usuarios configurados. Use el botón Sincronizar para cargar usuarios desde Authentication.');
+      }
     } catch (error) {
       console.error('Error cargando usuarios:', error);
+      this.notificationService.showError('Error al cargar usuarios: ' + (error as any)?.message);
+      // Asegurar que users no sea undefined
+      this.users = [];
+    }
+  }
+
+  async loadSorteoSchedules(): Promise<void> {
+    try {
+      console.log('Iniciando carga de horarios de sorteos...');
+      this.sorteoSchedules = await this.supabaseService.getSorteoSchedules();
+      console.log('Horarios de sorteos cargados:', this.sorteoSchedules);
+      
+      if (this.sorteoSchedules.length === 0) {
+        console.warn('No se encontraron horarios de sorteos en la base de datos');
+        this.notificationService.showError('No se encontraron horarios de sorteos configurados');
+      }
+    } catch (error) {
+      console.error('Error cargando horarios de sorteos:', error);
+      this.notificationService.showError('Error al cargar los horarios de sorteos');
     }
   }
 
@@ -309,11 +395,16 @@ export class AdminComponent implements OnInit {
       
       if (this.editingUser) {
         // Actualizar usuario existente
-        console.log('Actualizando usuario:', this.userFormData);
+        await this.supabaseService.updateUser(this.editingUser.id, {
+          email: this.userFormData.email,
+          role: this.userFormData.role,
+          sucursal: this.userFormData.sucursal,
+          active: this.userFormData.active
+        });
         this.notificationService.showSuccess('Usuario actualizado exitosamente');
       } else {
         // Crear nuevo usuario
-        console.log('Creando usuario:', this.userFormData);
+        await this.supabaseService.createUser(this.userFormData);
         this.notificationService.showSuccess('Usuario creado exitosamente');
       }
       
@@ -322,6 +413,20 @@ export class AdminComponent implements OnInit {
     } catch (error) {
       console.error('Error guardando usuario:', error);
       this.notificationService.showError('Error al guardar el usuario');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async toggleUserStatus(user: any): Promise<void> {
+    try {
+      this.isLoading = true;
+      await this.supabaseService.toggleUserStatus(user.id);
+      this.notificationService.showSuccess('Estado del usuario actualizado');
+      await this.loadUsers();
+    } catch (error) {
+      console.error('Error cambiando estado del usuario:', error);
+      this.notificationService.showError('Error al cambiar el estado del usuario');
     } finally {
       this.isLoading = false;
     }
@@ -358,7 +463,9 @@ export class AdminComponent implements OnInit {
   }
 
   generateDailyReport(): void {
-    const reportDate = this.selectedDate ? new Date(this.selectedDate) : new Date();
+    const reportDate = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
+    console.log('=== GENERANDO REPORTE DIARIO CON HONDURAS TIMEZONE ===');
+    console.log('Fecha del reporte:', this.supabaseService.formatHondurasDateTime(reportDate));
     this.printService.generateDailyReport(this.sales, reportDate);
   }
 
@@ -423,7 +530,11 @@ export class AdminComponent implements OnInit {
   }
 
   trackByUser(index: number, user: any): string {
-    return user.id || index.toString();
+    return user.id;
+  }
+
+  trackBySorteo(index: number, sorteo: any): string {
+    return sorteo.id || index.toString();
   }
 
   verDetalles(sale: Sale): void {
@@ -454,11 +565,47 @@ export class AdminComponent implements OnInit {
     this.showUserModal = true;
   }
 
-  toggleUserStatus(user: any): void {
-    // Implementar cambio de estado del usuario
-    user.active = !user.active;
-    console.log('Cambiando estado del usuario:', user);
-    // Aquí se debería llamar al servicio para actualizar en la BD
+  // ========================
+  // CAMBIO DE CONTRASEÑA
+  // ========================
+
+  changePassword(user: any): void {
+    this.selectedUserForPassword = user;
+    this.newPassword = '';
+    this.confirmPassword = '';
+    this.showPasswordModal = true;
+  }
+
+  closePasswordModal(): void {
+    this.showPasswordModal = false;
+    this.selectedUserForPassword = null;
+    this.newPassword = '';
+    this.confirmPassword = '';
+  }
+
+  async changeUserPassword(): Promise<void> {
+    if (this.newPassword !== this.confirmPassword) {
+      this.notificationService.showError('Las contraseñas no coinciden');
+      return;
+    }
+
+    if (this.newPassword.length < 6) {
+      this.notificationService.showError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    try {
+      this.isLoading = true;
+      // Implementar método en SupabaseService para cambiar contraseña
+      await this.supabaseService.updateUserPassword(this.selectedUserForPassword.id, this.newPassword);
+      this.notificationService.showSuccess('Contraseña actualizada exitosamente');
+      this.closePasswordModal();
+    } catch (error) {
+      console.error('Error cambiando contraseña:', error);
+      this.notificationService.showError('Error al cambiar la contraseña');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   // Método para generar reporte de ventas en Excel
@@ -483,7 +630,8 @@ export class AdminComponent implements OnInit {
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', `ventas_excel_${new Date().toISOString().split('T')[0]}.csv`);
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
+      link.setAttribute('download', `ventas_excel_${hondurasToday.toISOString().split('T')[0]}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -530,4 +678,115 @@ export class AdminComponent implements OnInit {
       this.factorMultiplicador[sorteoName] = +target.value;
     }
   }
+
+  // ========================
+  // GESTIÓN DE SORTEOS
+  // ========================
+
+  createSorteoSchedule(): void {
+    this.editingSorteo = null;
+    this.sorteoFormData = {
+      name: '',
+      label: '',
+      close_time: ''
+    };
+    this.showSorteoModal = true;
+  }
+
+  editSorteoSchedule(sorteo: any): void {
+    console.log('Editando sorteo:', sorteo);
+    this.editingSorteo = sorteo;
+    this.sorteoFormData = { 
+      name: sorteo.name,
+      label: sorteo.label,
+      close_time: sorteo.close_time
+    };
+    console.log('Datos del formulario:', this.sorteoFormData);
+    this.showSorteoModal = true;
+  }
+
+  closeSorteoModal(): void {
+    this.showSorteoModal = false;
+    this.editingSorteo = null;
+    this.sorteoFormData = {
+      name: '',
+      label: '',
+      close_time: ''
+    };
+  }
+
+
+  // ========================
+  // MÉTODOS DE DEBUG
+  // ========================
+
+  async debugSorteoSchedules(): Promise<void> {
+    try {
+      this.isLoading = true;
+      await this.supabaseService.debugSorteoSchedules();
+      this.notificationService.showSuccess('Revisa la consola para ver los resultados del debug');
+    } catch (error) {
+      console.error('Error en debug:', error);
+      this.notificationService.showError('Error ejecutando debug');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+   
+
+  // ===== MÉTODOS PARA ACORDEÓN =====
+  
+  toggleSorteosSection(): void {
+    this.showSorteosSection = !this.showSorteosSection;
+  }
+
+  toggleUsersSection(): void {
+    this.showUsersSection = !this.showUsersSection;
+  }
+
+  // ===== MÉTODOS PARA ABRIR MODALES =====
+  
+  openCreateSorteoModal(): void {
+    this.editingSorteo = null;
+    this.sorteoFormData = {
+      name: '',
+      label: '',
+      close_time: ''
+    };
+    this.showSorteoModal = true;
+  }
+
+  openCreateUserModal(): void {
+    this.editingUser = null;
+    this.userFormData = {
+      email: '',
+      password: '',
+      role: 'sucursal',
+      sucursal: '',
+      active: true
+    };
+    this.showUserModal = true;
+  }
+
+  async syncUsersFromAuth(): Promise<void> {
+    try {
+      this.isLoading = true;
+      this.notificationService.showInfo('Sincronizando usuarios desde auth.users...');
+      
+      // Usar el nuevo método de sincronización
+      await this.supabaseService.syncUsersFromAuth();
+      
+      // Recargar la lista de usuarios
+      await this.loadUsers();
+      
+      this.notificationService.showSuccess('Usuarios sincronizados correctamente');
+    } catch (error) {
+      console.error('Error sincronizando usuarios:', error);
+      this.notificationService.showError('Error al sincronizar usuarios');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
 }

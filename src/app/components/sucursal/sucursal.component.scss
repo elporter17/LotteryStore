@@ -46,6 +46,32 @@
   color: #6c757d;
 }
 
+.time-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 8px 16px;
+  
+  .time-label {
+    font-size: 11px;
+    color: #6c757d;
+    font-weight: 500;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .time-value {
+    font-size: 14px;
+    color: #2c5aa0;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+  }
+}
+
 .sucursal-title h2 {
   margin: 0;
   font-size: 20px;

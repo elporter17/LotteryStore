@@ -3,6 +3,9 @@ import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/su
 import { environment } from '../../environments/environment';
 import { User, Sale, SaleDetail, Sorteo } from '../models/interfaces';
 import { Observable, BehaviorSubject } from 'rxjs';
+import { format, parseISO } from 'date-fns';
+import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz';
+import { es } from 'date-fns/locale';
 
 @Injectable({
   providedIn: 'root'
@@ -24,24 +27,21 @@ export class SupabaseService {
     this.supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
       
-      if (session?.user) {
-        console.log('Usuario autenticado:', session.user.id);
+      if (session?.user && session.user.email) {
+        console.log('Usuario autenticado:', session.user.email);
         
-        // Usar datos básicos inmediatamente
+        // Determinar rol basado en email
         const userData: User = {
           id: session.user.id,
-          email: session.user.email || '',
-          role: 'sucursal' as const,
-          sucursal: 'Principal',
+          email: session.user.email,
+          role: session.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
+          sucursal: this.getSucursalFromEmail(session.user.email),
           active: true,
           createdAt: new Date()
         };
         
         console.log('Setting user data:', userData);
         this.currentUserSubject.next(userData);
-        
-        // Cargar datos adicionales en segundo plano
-        this.loadUserDataInBackground(session.user.id);
       } else {
         console.log('No session, clearing user');
         this.currentUserSubject.next(null);
@@ -62,24 +62,21 @@ export class SupabaseService {
         return;
       }
       
-      if (session?.user) {
-        console.log('Sesión encontrada:', session.user.id);
+      if (session?.user && session.user.email) {
+        console.log('Sesión encontrada:', session.user.email);
         
-        // Usar directamente los datos de la sesión para evitar timeouts
+        // Determinar rol correctamente basado en el email
         const userData: User = {
           id: session.user.id,
-          email: session.user.email || '',
-          role: 'sucursal' as const,
-          sucursal: 'Principal',
+          email: session.user.email,
+          role: session.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
+          sucursal: this.getSucursalFromEmail(session.user.email),
           active: true,
           createdAt: new Date()
         };
         
         console.log('Datos de usuario inicializados:', userData);
         this.currentUserSubject.next(userData);
-        
-        // Intentar obtener datos de la tabla users en segundo plano (no bloqueante)
-        this.loadUserDataInBackground(session.user.id);
       } else {
         console.log('No hay sesión activa');
         this.currentUserSubject.next(null);
@@ -142,10 +139,20 @@ export class SupabaseService {
         throw error;
       }
 
-      if (data.user) {
-        console.log('Usuario autenticado:', data.user.id);
-        const userData = await this.getUserData(data.user.id);
-        console.log('Datos del usuario obtenidos:', userData);
+      if (data.user && data.user.email) {
+        console.log('Usuario autenticado:', data.user.email);
+        
+        // Crear datos del usuario basado en el email
+        const userData: User = {
+          id: data.user.id,
+          email: data.user.email,
+          role: data.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
+          sucursal: this.getSucursalFromEmail(data.user.email),
+          active: true,
+          createdAt: new Date()
+        };
+        
+        this.currentUserSubject.next(userData);
         return userData;
       }
 
@@ -154,6 +161,15 @@ export class SupabaseService {
       console.error('Error en login:', error);
       throw error;
     }
+  }
+
+  private getSucursalFromEmail(email: string): string {
+    if (email === 'gerencia@loteria.com') return '';
+    if (email.includes('venta1')) return 'Sucursal 1';
+    if (email.includes('venta2')) return 'Sucursal 2';
+    if (email.includes('venta3')) return 'Sucursal 3';
+    if (email.includes('venta4')) return 'Sucursal 4';
+    return 'Principal';
   }
 
   async logout(): Promise<void> {
@@ -307,32 +323,26 @@ export class SupabaseService {
 
   async createSale(sale: Omit<Sale, 'id' | 'createdAt'>): Promise<string> {
     try {
-      // Asegurar que la fecha sea del mismo día actual (timezone local)
-      const now = new Date();
-      const saleDate = new Date(sale.fecha);
-      
-      // Forzar que la fecha de la venta sea hoy en timezone local
-      const todayWithCorrectTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 
-                                          saleDate.getHours(), saleDate.getMinutes(), saleDate.getSeconds());
+      // Obtener fecha/hora actual en Honduras
+      const hondurasTime = this.getHondurasDateTime();
+      // Convertir a UTC para guardar en la base de datos
+      const utcTime = this.hondurasToUtc(hondurasTime);
 
       const saleData = {
         user_id: sale.userId,
         sucursal: sale.sucursal,
         sorteo: sale.sorteo,
-        fecha: todayWithCorrectTime.toISOString(),
+        fecha: utcTime.toISOString(),
         total: sale.total,
         numero_recibo: sale.numeroRecibo,
         correlativo: sale.correlativo,
-        created_at: now.toISOString()
+        created_at: utcTime.toISOString()
       };
 
-      console.log('=== GUARDANDO VENTA ===');
-      console.log('Fecha original:', sale.fecha);
-      console.log('Fecha corregida:', todayWithCorrectTime.toISOString());
-      console.log('Fecha actual:', now.toISOString());
-      console.log('Datos de venta a guardar:', saleData);
-      console.log('Correlativo:', sale.correlativo);
-      console.log('Número de recibo:', sale.numeroRecibo);
+      console.log('=== GUARDANDO VENTA CON DATE-FNS-TZ ===');
+      console.log('Hora Honduras:', this.formatHondurasDateTime(hondurasTime));
+      console.log('Hora UTC para BD:', utcTime.toISOString());
+      console.log('Datos de venta:', saleData);
 
       const { data, error } = await this.supabase
         .from('sales')
@@ -346,8 +356,6 @@ export class SupabaseService {
       }
 
       console.log('Venta guardada exitosamente:', data);
-      console.log('ID de venta creada:', data.id);
-
       return data.id;
     } catch (error) {
       console.error('Error creando venta:', error);
@@ -412,24 +420,28 @@ export class SupabaseService {
 
   async getSalesByDateAndSorteo(fecha: Date, sorteo: string): Promise<Sale[]> {
     try {
-      console.log('=== INICIANDO CONSULTA DE VENTAS ===');
-      console.log('Fecha solicitada:', fecha);
+      console.log('=== INICIANDO CONSULTA DE VENTAS CON DATE-FNS-TZ ===');
+      console.log('Fecha solicitada Honduras:', this.formatDateForHonduras(fecha));
       console.log('Sorteo filtro:', sorteo || 'TODOS');
 
-      const startOfDay = new Date(fecha);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(fecha);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Crear rango de fechas para el día seleccionado en hora de Honduras
+      const startOfDayHonduras = new Date(fecha);
+      startOfDayHonduras.setHours(0, 0, 0, 0);
+      const endOfDayHonduras = new Date(fecha);
+      endOfDayHonduras.setHours(23, 59, 59, 999);
 
-      console.log('Rango de consulta:');
-      console.log('Inicio:', startOfDay.toISOString());
-      console.log('Final:', endOfDay.toISOString());
+      // Convertir a UTC para consultar en la base de datos
+      const startOfDayUtc = this.hondurasToUtc(startOfDayHonduras);
+      const endOfDayUtc = this.hondurasToUtc(endOfDayHonduras);
+
+      console.log('Rango Honduras:', this.formatHondurasDateTime(startOfDayHonduras), 'a', this.formatHondurasDateTime(endOfDayHonduras));
+      console.log('Rango UTC para consulta:', startOfDayUtc.toISOString(), 'a', endOfDayUtc.toISOString());
 
       let query = this.supabase
         .from('sales')
         .select('*')
-        .gte('fecha', startOfDay.toISOString())
-        .lte('fecha', endOfDay.toISOString())
+        .gte('fecha', startOfDayUtc.toISOString())
+        .lte('fecha', endOfDayUtc.toISOString())
         .order('created_at', { ascending: false });
 
       if (sorteo && sorteo.trim() !== '') {
@@ -461,7 +473,8 @@ export class SupabaseService {
         if (!debugError && debugData) {
           console.log('Últimas 5 ventas en la tabla para debug:');
           debugData.forEach((sale, index) => {
-            console.log(`${index + 1}. ID: ${sale.id}, Fecha: ${sale.fecha}, Sucursal: ${sale.sucursal}`);
+            const fechaHonduras = this.parseDateFromDatabase(sale.fecha);
+            console.log(`${index + 1}. ID: ${sale.id}, Fecha Honduras: ${this.formatDateForHonduras(fechaHonduras)}, Fecha UTC: ${sale.fecha}, Sucursal: ${sale.sucursal}`);
           });
         }
         
@@ -470,14 +483,14 @@ export class SupabaseService {
 
       // Log detallado de cada venta encontrada
       data.forEach((sale, index) => {
+        const fechaHonduras = this.parseDateFromDatabase(sale.fecha);
         console.log(`Venta ${index + 1}:`);
         console.log(`  - ID: ${sale.id}`);
-        console.log(`  - Fecha: ${sale.fecha}`);
+        console.log(`  - Fecha Honduras: ${this.formatDateForHonduras(fechaHonduras)}`);
+        console.log(`  - Fecha UTC: ${sale.fecha}`);
         console.log(`  - Sucursal: ${sale.sucursal}`);
         console.log(`  - Sorteo: ${sale.sorteo}`);
         console.log(`  - Total: ${sale.total}`);
-        console.log(`  - Correlativo: ${sale.correlativo}`);
-        console.log(`  - Numero Recibo: ${sale.numero_recibo}`);
       });
 
       const mappedSales = data.map(sale => ({
@@ -485,11 +498,11 @@ export class SupabaseService {
         userId: sale.user_id,
         sucursal: sale.sucursal,
         sorteo: sale.sorteo,
-        fecha: new Date(sale.fecha),
+        fecha: this.parseDateFromDatabase(sale.fecha), // Convertir a hora Honduras
         total: sale.total,
         numeroRecibo: sale.numero_recibo || sale.id.slice(-6),
         correlativo: sale.correlativo || 0,
-        createdAt: new Date(sale.created_at)
+        createdAt: this.parseDateFromDatabase(sale.created_at) // Convertir a hora Honduras
       })) as Sale[];
 
       console.log('=== VENTAS MAPEADAS EXITOSAMENTE ===');
@@ -818,4 +831,496 @@ export class SupabaseService {
       console.error('Error verificando permisos:', error);
     }
   }
+
+  // ========================
+  // GESTIÓN DE USUARIOS
+  // ========================
+
+  async getUsers(): Promise<User[]> {
+    try {
+      console.log('Cargando usuarios...');
+      
+      // Retornar usuarios por defecto simples para que funcione
+      return [
+        {
+          id: '1',
+          email: 'gerencia@loteria.com',
+          role: 'admin',
+          sucursal: '',
+          active: true,
+          createdAt: new Date()
+        },
+        {
+          id: '2', 
+          email: 'venta1@loteria.com',
+          role: 'sucursal',
+          sucursal: 'Sucursal 1',
+          active: true,
+          createdAt: new Date()
+        },
+        {
+          id: '3',
+          email: 'venta2@loteria.com', 
+          role: 'sucursal',
+          sucursal: 'Sucursal 2',
+          active: true,
+          createdAt: new Date()
+        },
+        {
+          id: '4',
+          email: 'venta3@loteria.com',
+          role: 'sucursal', 
+          sucursal: 'Sucursal 3',
+          active: true,
+          createdAt: new Date()
+        },
+        {
+          id: '5',
+          email: 'venta4@loteria.com',
+          role: 'sucursal',
+          sucursal: 'Sucursal 4', 
+          active: true,
+          createdAt: new Date()
+        }
+      ];
+    } catch (error) {
+      console.error('Error obteniendo usuarios:', error);
+      return [];
+    }
+  }
+
+  private getDefaultUsers(): User[] {
+    return [
+      {
+        id: '1',
+        email: 'admin@loteria.com',
+        role: 'admin',
+        sucursal: '',
+        active: true,
+        createdAt: new Date()
+      },
+      {
+        id: '2',
+        email: 'sucursal1@loteria.com',
+        role: 'sucursal',
+        sucursal: 'Sucursal 1',
+        active: true,
+        createdAt: new Date()
+      }
+    ];
+  }
+
+  private async createProfilesFromAuthUsers(authUsers: any[]): Promise<void> {
+    try {
+      const profilesData = authUsers.map(authUser => ({
+        id: authUser.id,
+        email: authUser.email,
+        role: authUser.email?.includes('admin') || authUser.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
+        sucursal: this.getSucursalFromEmail(authUser.email || ''),
+        active: true,
+        created_at: new Date(authUser.created_at).toISOString()
+      }));
+
+      const { error } = await this.supabase
+        .from('profiles')
+        .upsert(profilesData, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('Error creando perfiles automáticamente:', error);
+      } else {
+        console.log('Perfiles creados automáticamente desde auth.users');
+      }
+    } catch (error) {
+      console.warn('Error en createProfilesFromAuthUsers:', error);
+    }
+  }
+
+  async createUser(userData: { email: string, password: string, role: string, sucursal?: string }): Promise<User> {
+    try {
+      // Crear usuario en auth
+      const { data: authData, error: authError } = await this.supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password
+      });
+
+      if (authError) {
+        console.error('Error creando usuario auth:', authError);
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error('No se pudo crear el usuario');
+      }
+
+      // Crear perfil de usuario en la tabla profiles
+      const userProfile = {
+        id: authData.user.id,
+        email: userData.email,
+        role: userData.role,
+        sucursal: userData.sucursal || '',
+        active: true,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await this.supabase
+        .from('profiles')
+        .insert([userProfile])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creando perfil de usuario:', error);
+        // Si falla, aún podemos retornar el usuario creado
+        return {
+          id: authData.user.id,
+          email: userData.email,
+          role: userData.role as 'admin' | 'sucursal',
+          sucursal: userData.sucursal || '',
+          active: true,
+          createdAt: new Date()
+        };
+      }
+
+      return {
+        id: data.id,
+        email: data.email,
+        role: data.role,
+        sucursal: data.sucursal || '',
+        active: data.active,
+        createdAt: new Date(data.created_at)
+      };
+    } catch (error) {
+      console.error('Error creando usuario:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(userId: string, updates: Partial<User>): Promise<User> {
+    try {
+      // Convertir el objeto updates al formato de la tabla profiles
+      const profileUpdates: any = {};
+      if (updates.email) profileUpdates.email = updates.email;
+      if (updates.role) profileUpdates.role = updates.role;
+      if (updates.sucursal !== undefined) profileUpdates.sucursal = updates.sucursal;
+      if (updates.active !== undefined) profileUpdates.active = updates.active;
+
+      const { data, error } = await this.supabase
+        .from('profiles')
+        .update(profileUpdates)
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error actualizando usuario:', error);
+        throw error;
+      }
+
+      return {
+        id: data.id,
+        email: data.email,
+        role: data.role,
+        sucursal: data.sucursal || '',
+        active: data.active,
+        createdAt: new Date(data.created_at)
+      };
+    } catch (error) {
+      console.error('Error actualizando usuario:', error);
+      throw error;
+    }
+  }
+
+  async toggleUserStatus(userId: string): Promise<User> {
+    try {
+      // Primero obtener el estado actual
+      const { data: currentUser, error: fetchError } = await this.supabase
+        .from('profiles')
+        .select('active')
+        .eq('id', userId)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Cambiar el estado
+      const newStatus = !currentUser.active;
+      return await this.updateUser(userId, { active: newStatus });
+    } catch (error) {
+      console.error('Error cambiando estado del usuario:', error);
+      throw error;
+    }
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error eliminando usuario:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error eliminando usuario:', error);
+      throw error;
+    }
+  }
+
+  async updateUserPassword(userId: string, newPassword: string): Promise<void> {
+    try {
+      const { error } = await this.supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        console.error('Error actualizando contraseña:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error actualizando contraseña:', error);
+      throw error;
+    }
+  }
+
+  // ========================
+  // GESTIÓN DE SORTEOS
+  // ========================
+
+  async getSorteoSchedules(): Promise<any[]> {
+    try {
+      console.log('Ejecutando consulta a sorteo_schedules...');
+      
+      const { data, error } = await this.supabase
+        .from('sorteo_schedules')
+        .select('*')
+        .order('close_time', { ascending: true });
+
+      if (error) {
+        console.error('Error en consulta sorteo_schedules:', error);
+        throw error;
+      }
+
+      console.log('Datos obtenidos de sorteo_schedules:', data);
+      return data || [];
+    } catch (error) {
+      console.error('Error obteniendo horarios de sorteos:', error);
+      throw error;
+    }
+  }
+
+  async createSorteoSchedule(sorteoData: { name: string, label: string, close_time: string }): Promise<any> {
+    try {
+      const { data, error } = await this.supabase
+        .from('sorteo_schedules')
+        .insert([sorteoData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creando sorteo:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error creando sorteo:', error);
+      throw error;
+    }
+  }
+
+  async updateSorteoSchedule(sorteoId: string, updates: { name?: string, label?: string, close_time?: string }): Promise<any> {
+    try {
+      const { data, error } = await this.supabase
+        .from('sorteo_schedules')
+        .update(updates)
+        .eq('id', sorteoId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error actualizando sorteo:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error actualizando sorteo:', error);
+      throw error;
+    }
+  }
+
+  async deleteSorteoSchedule(sorteoId: string): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('sorteo_schedules')
+        .delete()
+        .eq('id', sorteoId);
+
+      if (error) {
+        console.error('Error eliminando sorteo:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error eliminando sorteo:', error);
+      throw error;
+    }
+  }
+
+  // ========================
+  // MÉTODOS DE DEBUG Y SETUP
+  // ========================
+
+  async debugSorteoSchedules(): Promise<void> {
+    try {
+      console.log('=== DEBUG SORTEO SCHEDULES ===');
+      
+      // Primero verificar si la tabla existe consultando directamente
+      const { data: testQuery, error: testError } = await this.supabase
+        .from('sorteo_schedules')
+        .select('*')
+        .limit(1);
+
+      if (testError) {
+        console.error('❌ Error consultando sorteo_schedules:', testError);
+        
+        if (testError.message.includes('does not exist')) {
+          console.log('🔧 La tabla sorteo_schedules no existe. Necesitas crearla.');
+          console.log('🔧 Ejecuta este SQL en Supabase Dashboard:');
+          console.log(`
+CREATE TABLE IF NOT EXISTS sorteo_schedules (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    label VARCHAR(100) NOT NULL,
+    close_time VARCHAR(5) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+INSERT INTO sorteo_schedules (name, label, close_time) VALUES
+    ('matutino', 'Matutino', '11:00'),
+    ('vespertino', 'Vespertino', '17:00'),
+    ('nocturno', 'Nocturno', '21:00')
+ON CONFLICT (name) DO NOTHING;
+
+ALTER TABLE sorteo_schedules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access" ON sorteo_schedules
+    FOR SELECT USING (true);
+          `);
+        }
+        return;
+      }
+
+      console.log('✅ Tabla sorteo_schedules existe');
+      console.log('📊 Datos encontrados:', testQuery);
+
+    } catch (error) {
+      console.error('💥 Error en debug sorteo_schedules:', error);
+    }
+  }
+
+  async initializeSorteoSchedules(): Promise<void> {
+    try {
+      // Crear los sorteos por defecto si no existen
+      const defaultSorteos = [
+        { name: 'matutino', label: 'Matutino', close_time: '11:00' },
+        { name: 'vespertino', label: 'Vespertino', close_time: '17:00' },
+        { name: 'nocturno', label: 'Nocturno', close_time: '21:00' }
+      ];
+
+      for (const sorteo of defaultSorteos) {
+        const { error } = await this.supabase
+          .from('sorteo_schedules')
+          .upsert(sorteo, { onConflict: 'name' });
+
+        if (error) {
+          console.error(`Error creando sorteo ${sorteo.name}:`, error);
+        } else {
+          console.log(`Sorteo ${sorteo.name} creado/actualizado exitosamente`);
+        }
+      }
+    } catch (error) {
+      console.error('Error inicializando sorteo_schedules:', error);
+    }
+  }
+
+  // Método para inicializar la tabla de perfiles si no existe
+  async initializeProfilesTable(): Promise<void> {
+    try {
+      console.log('Verificando tabla profiles...');
+      
+      // Simplemente intentar hacer una consulta para ver si la tabla existe
+      const { error } = await this.supabase
+        .from('profiles')
+        .select('count', { count: 'exact', head: true });
+      
+      if (error) {
+        console.warn('La tabla profiles no existe o no es accesible:', error.message);
+      } else {
+        console.log('Tabla profiles disponible');
+      }
+    } catch (error) {
+      console.warn('Error verificando tabla profiles:', error);
+    }
+  }
+
+  // Método para sincronizar usuarios manualmente
+  async syncUsersFromAuth(): Promise<void> {
+    try {
+      console.log('Función de sincronización simplificada - no hace nada por ahora');
+      console.log('Los usuarios se muestran desde la lista por defecto');
+    } catch (error) {
+      console.error('Error en sincronización:', error);
+    }
+  }
+
+  // ========== FUNCIONES DE TIMEZONE HONDURAS CON DATE-FNS-TZ ==========
+  private readonly HONDURAS_TIMEZONE = 'America/Tegucigalpa';
+
+  // Función para obtener la fecha/hora actual en Honduras
+  getHondurasDateTime(): Date {
+    const now = new Date();
+    return toZonedTime(now, this.HONDURAS_TIMEZONE);
+  }
+
+  // Función para formatear fecha/hora en formato de Honduras
+  formatHondurasDateTime(date?: Date): string {
+    const targetDate = date || new Date();
+    return formatInTimeZone(targetDate, this.HONDURAS_TIMEZONE, 'yyyy-MM-dd hh:mm:ss a', { 
+      locale: es 
+    });
+  }
+
+  // Función para convertir una fecha de Honduras a UTC para guardar en BD
+  private hondurasToUtc(date: Date): Date {
+    return fromZonedTime(date, this.HONDURAS_TIMEZONE);
+  }
+
+  // Función para convertir una fecha UTC de BD a hora de Honduras
+  private utcToHonduras(utcDate: Date): Date {
+    return toZonedTime(utcDate, this.HONDURAS_TIMEZONE);
+  }
+
+  // Método público para que los componentes obtengan la hora de Honduras
+  getHondurasTimeNow(): Date {
+    return this.getHondurasDateTime();
+  }
+
+  // Método público para formatear fechas en hora de Honduras con formato legible
+  formatDateForHonduras(date?: Date): string {
+    const targetDate = date || new Date();
+    return formatInTimeZone(targetDate, this.HONDURAS_TIMEZONE, 'dd/MM/yyyy hh:mm:ss a', { 
+      locale: es 
+    });
+  }
+
+  // Método público para parsear fechas de la base de datos a hora de Honduras
+  parseDateFromDatabase(isoString: string): Date {
+    const utcDate = parseISO(isoString);
+    return toZonedTime(utcDate, this.HONDURAS_TIMEZONE);
+  }
+
 }

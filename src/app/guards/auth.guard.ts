@@ -16,7 +16,7 @@ export class AuthGuard implements CanActivate {
 
   canActivate(): Observable<boolean> {
     return this.supabaseService.currentUser$.pipe(
-      timeout(5000), // 5 segundos timeout
+      timeout(8000), // Aumentar timeout a 8 segundos
       map(user => {
         console.log('AuthGuard - Usuario actual:', user);
         return !!user;
@@ -30,6 +30,7 @@ export class AuthGuard implements CanActivate {
       }),
       catchError(error => {
         console.error('AuthGuard - Error o timeout:', error);
+        // Dar más tiempo antes de redirigir
         this.router.navigate(['/login']);
         return of(false);
       })

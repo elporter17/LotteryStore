@@ -17,15 +17,15 @@ export class SucursalComponent implements OnInit, OnDestroy {
   currentSorteo: SorteoSchedule | null = null;
   timeUntilClose: string = '';
   isSorteoOpen: boolean = false;
-  
+
   selectedNumber: number | null = null;
   selectedAmount: number | null = null;
   selectedNumbers: { numero: number, monto: number }[] = [];
-  
+
   // Propiedades para entrada individual
   numero: number | null = null;
   monto: number | null = null;
-  
+
   todaySales: Sale[] = [];
   recentSales: Sale[] = [];
   saleDetails: { [saleId: string]: SaleDetail[] } = {};
@@ -48,10 +48,14 @@ export class SucursalComponent implements OnInit, OnDestroy {
   modalNumberInput: string = '';
   modalAmountInput: string = '';
 
+  // Propiedades para la hora de Honduras
+  currentHondurasTime: string = '';
+
   // Manejo de suscripciones y timers
   private userSubscription?: Subscription;
   private sorteoUpdateInterval?: any;
   private timeCheckInterval?: any;
+  private hondurasTimeInterval?: any;
   private isProcessingModal: boolean = false;
 
   constructor(
@@ -65,7 +69,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     console.log('[SUCURSAL] ngOnInit iniciado');
-    
+
     this.userSubscription = this.supabaseService.currentUser$.subscribe(user => {
       console.log('[SUCURSAL] Usuario actualizado:', user);
       this.currentUser = user;
@@ -76,18 +80,24 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     this.initializeComponent();
     this.checkTimeRestrictions();
-    
+    this.updateHondurasTime();
+
     // Verificar bloqueo cada minuto - usar método que se puede limpiar
     this.timeCheckInterval = setInterval(() => {
       this.checkTimeRestrictions();
     }, 60000);
-    
+
+    // Actualizar hora de Honduras cada segundo
+    this.hondurasTimeInterval = setInterval(() => {
+      this.updateHondurasTime();
+    }, 1000);
+
     console.log('[SUCURSAL] ngOnInit completado');
   }
 
   ngOnDestroy(): void {
     console.log('[SUCURSAL] ngOnDestroy iniciado - limpiando recursos');
-    
+
     // Limpiar suscripciones y timers
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();
@@ -99,11 +109,23 @@ export class SucursalComponent implements OnInit, OnDestroy {
     }
     if (this.timeCheckInterval) {
       clearInterval(this.timeCheckInterval);
-      console.log('[SUCURSAL] Interval de tiempo limpiado');
+      console.log('[SUCURSAL] Interval de verificación de tiempo limpiado');
     }
-    
+    if (this.hondurasTimeInterval) {
+      clearInterval(this.hondurasTimeInterval);
+      console.log('[SUCURSAL] Interval de hora Honduras limpiado');
+    }
+
     console.log('[SUCURSAL] ngOnDestroy completado');
   }
+
+  private updateHondurasTime(): void {
+    const hondurasTime = this.supabaseService.getHondurasTimeNow();
+    const fullFormatted = this.supabaseService.formatDateForHonduras(hondurasTime);
+
+    const parts = fullFormatted.split(' ');
+    this.currentHondurasTime = `${parts[1]} ${parts[2]}`; // "12:49:39 AM"
+   }
 
   private async initializeComponent(): Promise<void> {
     try {
@@ -114,12 +136,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
       await this.loadTodaySales();
       await this.loadRecentSales();
       this.setFilterDate();
-      
+
       // Limpiar timer anterior si existe
       if (this.sorteoUpdateInterval) {
         clearInterval(this.sorteoUpdateInterval);
       }
-      
+
       // Actualizar cada minuto - usar método que se puede limpiar
       this.sorteoUpdateInterval = setInterval(() => {
         this.updateSorteoInfo();
@@ -134,8 +156,11 @@ export class SucursalComponent implements OnInit, OnDestroy {
   }
 
   setFilterDate(): void {
-    const today = new Date();
-    this.filterDate = today.toISOString().split('T')[0];
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
+    this.filterDate = hondurasToday.toISOString().split('T')[0];
+    console.log('=== FILTRO DE FECHA CON HONDURAS TIMEZONE ===');
+    console.log('Fecha Honduras:', this.supabaseService.formatDateForHonduras(hondurasToday));
+    console.log('FilterDate establecido:', this.filterDate);
   }
 
   onFilterDateChange(): void {
@@ -158,7 +183,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
   updateSorteoInfo(): void {
     try {
       this.currentSorteo = this.sorteoService.getCurrentSorteo();
-      
+
       if (this.currentSorteo) {
         this.isSorteoOpen = this.sorteoService.isSorteoOpen(this.currentSorteo);
         this.timeUntilClose = this.sorteoService.getTimeUntilClose(this.currentSorteo);
@@ -169,9 +194,9 @@ export class SucursalComponent implements OnInit, OnDestroy {
   }
 
   addNumber(): void {
-    if (this.numero && this.monto && 
-        this.numero >= 0 && this.numero <= 99) {
-      
+    if (this.numero && this.monto &&
+      this.numero >= 0 && this.numero <= 99) {
+
       // Verificar si el número ya fue seleccionado
       const existingIndex = this.selectedNumbers.findIndex(n => n.numero === this.numero);
       if (existingIndex >= 0) {
@@ -184,7 +209,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
           monto: this.monto
         });
       }
-      
+
       this.numero = null;
       this.monto = null;
       this.numberInput = '';
@@ -196,9 +221,9 @@ export class SucursalComponent implements OnInit, OnDestroy {
   removeNumber(index: number): void {
     console.log('Eliminando número en índice:', index);
     console.log('Array antes:', [...this.selectedNumbers]);
-    
+
     this.selectedNumbers.splice(index, 1);
-    
+
     console.log('Array después:', [...this.selectedNumbers]);
     this.cdr.detectChanges(); // Forzar actualización visual inmediata
   }
@@ -209,12 +234,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
     const year = now.getFullYear().toString().slice(-2); // Últimos 2 dígitos del año
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
-    
+
     // Formato: SUC001-REC-250717-0001
     const sucursalCode = sucursal.replace(/\s+/g, '').toUpperCase().substring(0, 3);
     const correlativoFormatted = correlativo.toString().padStart(4, '0');
     const numeroRecibo = `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`;
-    
+
     console.log('Número de recibo generado:', numeroRecibo);
     return numeroRecibo;
   }
@@ -252,25 +277,26 @@ export class SucursalComponent implements OnInit, OnDestroy {
       // Obtener el siguiente correlativo para esta sucursal
       console.log('=== INICIANDO CÁLCULO DE CORRELATIVO ===');
       console.log('Sucursal:', this.currentUser.sucursal);
-      
+
       const correlativo = await this.supabaseService.getNextCorrelativo(this.currentUser.sucursal);
       console.log('Correlativo obtenido del servicio:', correlativo);
-      
+
       // Generar número de recibo con correlativo
       const numeroRecibo = this.generateReceiptNumber(correlativo, this.currentUser.sucursal);
       console.log('Número de recibo generado:', numeroRecibo);
-      
+
       const sale: any = {
         userId: this.currentUser.id,
         sucursal: this.currentUser.sucursal,
         sorteo: this.currentSorteo.name,
-        fecha: new Date(),
+        fecha: this.supabaseService.getHondurasDateTime(),
         total: this.getTotal(),
         numeroRecibo: numeroRecibo,
         correlativo: correlativo
       };
 
-      console.log('=== OBJETO SALE COMPLETO ===');
+      console.log('=== OBJETO SALE CON HONDURAS TIMEZONE ===');
+      console.log('Fecha Honduras:', this.supabaseService.formatHondurasDateTime(sale.fecha));
       console.log('Sale object:', JSON.stringify(sale, null, 2));
       console.log('Correlativo en sale:', sale.correlativo);
 
@@ -296,7 +322,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
       const saleWithId = { ...sale, id: saleId };
       console.log('Imprimiendo recibo para venta:', saleWithId);
       console.log('Detalles para imprimir:', saleDetails);
-      
+
       // Asegurar que los detalles tengan datos
       if (saleDetails.length === 0) {
         console.warn('No hay detalles de venta, usando selectedNumbers como fallback');
@@ -310,14 +336,14 @@ export class SucursalComponent implements OnInit, OnDestroy {
           });
         }
       }
-      
+
       this.printService.generateThermalReceipt(saleWithId, saleDetails);
 
       // Limpiar selección inmediatamente después de enviar a imprimir
       setTimeout(async () => {
         // Limpiar selección inmediatamente
         this.selectedNumbers = [];
-        
+
         // Resetear estado de modales
         this.showNumberModal = false;
         this.showAmountModal = false;
@@ -326,24 +352,24 @@ export class SucursalComponent implements OnInit, OnDestroy {
         this.modalAmountInput = '';
         this.tempNumber = null;
         this.tempAmount = null;
-        
+
         this.cdr.detectChanges(); // Forzar actualización visual inmediata
-        
+
         console.log('Selección limpiada, selectedNumbers:', this.selectedNumbers);
         console.log('Estado de modales reseteado');
-        
+
         // Recargar ventas actuales para mostrar la venta recién realizada
         console.log('Recargando ventas después de la venta...');
         await this.loadTodaySales();
         await this.loadRecentSales();
-        
+
         console.log('Ventas recargadas después de la venta');
         console.log('recentSales:', this.recentSales.length);
         console.log('todaySales:', this.todaySales.length);
-        
+
         this.cdr.detectChanges(); // Forzar actualización después de cargar ventas
       }, 100); // Pequeño retraso para evitar conflictos con la ventana de impresión
-      
+
       this.notificationService.showSuccess('Venta procesada e impresa exitosamente');
     } catch (error) {
       console.error('Error procesando venta:', error);
@@ -358,20 +384,24 @@ export class SucursalComponent implements OnInit, OnDestroy {
     if (!this.currentUser) return;
 
     try {
-      const today = new Date();
-      const allSales = await this.supabaseService.getSalesByDateAndSorteo(today, '');
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
+      console.log('=== CARGANDO VENTAS DEL DÍA CON HONDURAS TIMEZONE ===');
+      console.log('Fecha Honduras hoy:', this.supabaseService.formatHondurasDateTime(hondurasToday));
       
+      const allSales = await this.supabaseService.getSalesByDateAndSorteo(hondurasToday, '');
+
       this.todaySales = allSales.filter(sale => sale.sucursal === this.currentUser.sucursal);
-      
+      console.log(`Ventas filtradas para sucursal ${this.currentUser.sucursal}:`, this.todaySales.length);
+
       // Cargar detalles de cada venta con timeout individual
       for (const sale of this.todaySales) {
         try {
           const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => reject(new Error('Timeout cargando detalles')), 3000);
           });
-          
+
           const detailsPromise = this.supabaseService.getSaleDetails(sale.id);
-          
+
           this.saleDetails[sale.id] = await Promise.race([detailsPromise, timeoutPromise]) as SaleDetail[];
         } catch (error) {
           console.warn(`Error cargando detalles de venta ${sale.id}:`, error);
@@ -456,7 +486,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
   openNumberModal(): void {
     console.log('[MODAL] Intentando abrir modal de número');
     console.log('[MODAL] Estado actual - isProcessingModal:', this.isProcessingModal, 'isBlocked:', this.isBlocked);
-    
+
     if (this.isProcessingModal || this.isBlocked) {
       console.log('[MODAL] Cancelando apertura - procesando o bloqueado');
       if (this.isBlocked) {
@@ -464,13 +494,13 @@ export class SucursalComponent implements OnInit, OnDestroy {
       }
       return;
     }
-    
+
     this.isProcessingModal = true;
     console.log('[MODAL] Marcando como procesando');
-    
+
     // Reiniciar estado de modales
     this.closeAllModals();
-    
+
     // Eliminamos el setTimeout para evitar parpadeo
     this.showNumberModal = true;
     this.modalNumberInput = '';
@@ -512,7 +542,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
   acceptModalNumber(): void {
     console.log('Aceptando número:', this.modalNumberInput);
-    
+
     // Evitar múltiples ejecuciones
     if (!this.modalNumberInput || this.isProcessingModal) {
       if (!this.modalNumberInput) {
@@ -526,10 +556,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
     // Formatear el número con ceros a la izquierda si es necesario
     let formattedNumber = this.modalNumberInput.padStart(2, '0');
     const numero = parseInt(formattedNumber);
-    
+
     if (numero >= 0 && numero <= 99) {
       this.tempNumber = numero;
-      
+
       // Transición suave sin setTimeout
       this.showNumberModal = false;
       this.showAmountModal = true;
@@ -537,7 +567,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
       this.isProcessingModal = false;
       this.cdr.detectChanges();
       console.log('Modal de apuesta abierto, número seleccionado:', numero);
-      
+
     } else {
       this.isProcessingModal = false;
       this.notificationService.showError('Número inválido', 'El número debe estar entre 00 y 99');
@@ -563,7 +593,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
   acceptModalAmount(): void {
     console.log('Aceptando monto:', this.modalAmountInput);
-    
+
     if (!this.modalAmountInput || this.isProcessingModal) {
       if (!this.modalAmountInput) {
         this.notificationService.showError('Monto requerido', 'Debe ingresar un monto');
@@ -576,7 +606,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
     const monto = parseFloat(this.modalAmountInput);
     if (monto > 0 && monto <= 1000) { // Límite de apuesta
       this.tempAmount = monto;
-      
+
       // Transición suave sin setTimeout
       this.showAmountModal = false;
       this.showConfirmModal = true;
@@ -604,7 +634,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
           monto: this.tempAmount
         });
       }
-      
+
       // Quitar el modal de confirmación, solo cerrar modales
       this.closeAllModals();
       this.cdr.detectChanges(); // Forzar actualización final
@@ -623,7 +653,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
     const [hours, minutes] = this.currentSorteo.closeTime.split(':');
     const closeTime = new Date();
     closeTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
+
     const timeDiff = closeTime.getTime() - now.getTime();
     const minutesLeft = Math.floor(timeDiff / (1000 * 60));
 
@@ -642,10 +672,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
   // Filtrar ventas solo del sorteo actual
   getFilteredSales(): Sale[] {
     if (!this.recentSales || !this.currentSorteo) return [];
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     return this.recentSales.filter((sale: Sale) => {
       const saleDate = new Date(sale.createdAt);
       saleDate.setHours(0, 0, 0, 0);
@@ -654,13 +684,14 @@ export class SucursalComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Obtener fecha de hoy formateada
+  // Obtener fecha de hoy formateada usando Honduras timezone
   getTodayDate(): string {
-    return new Date().toLocaleDateString('es-HN', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const hondurasToday = this.supabaseService.getHondurasDateTime();
+    return hondurasToday.toLocaleDateString('es-HN', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   }
 
@@ -681,10 +712,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
       if (!this.todaySales || this.todaySales.length === 0) {
         await this.loadTodaySales();
       }
-      
+
       // Asignar las ventas del día como ventas recientes
       this.recentSales = [...this.todaySales];
-      
+
       console.log('Ventas recientes actualizadas:', this.recentSales.length);
     } catch (error) {
       console.error('Error cargando ventas recientes:', error);
@@ -696,24 +727,24 @@ export class SucursalComponent implements OnInit, OnDestroy {
   async reprintReceipt(sale: Sale): Promise<void> {
     try {
       console.log('Reimprimiendo recibo para venta:', sale);
-      
+
       this.notificationService.showLoading('Reimprimiendo recibo...');
-      
+
       // Obtener detalles de la venta desde la base de datos
       const details = await this.supabaseService.getSaleDetails(sale.id);
       console.log('Detalles obtenidos de la BD:', details);
-      
+
       if (details.length === 0) {
         console.warn('No se encontraron detalles para la venta:', sale.id);
         this.notificationService.showError('Sin detalles', 'No se encontraron detalles para esta venta. No se puede reimprimir el recibo.');
         return;
       }
-      
+
       // Generar recibo con los detalles obtenidos
       this.printService.generateThermalReceipt(sale, details);
-      
+
       this.notificationService.showSuccess('Recibo reimpreso', `Recibo #${sale.numeroRecibo || sale.id} enviado a impresora`);
-      
+
     } catch (error) {
       console.error('Error reimprimiendo recibo:', error);
       this.notificationService.showError('Error de reimpresión', 'Error al reimprimir el recibo. Por favor intente nuevamente.');
@@ -750,10 +781,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
     console.log('tempAmount:', this.tempAmount);
     console.log('currentUser:', this.currentUser);
     console.log('========================');
-    
+
     // Forzar reinicio completo de los modales
     this.closeAllModals();
-    
+
     alert(`Estado de modales:
 - showNumberModal: ${this.showNumberModal}
 - showAmountModal: ${this.showAmountModal}  
@@ -775,46 +806,46 @@ Revisa la consola para más detalles.`);
   async debugSalesData(): Promise<void> {
     console.log('=== INICIANDO DEBUG DESDE SUCURSAL ===');
     console.log('Usuario actual:', this.currentUser);
-    
+
     try {
       // Verificar permisos primero
       console.log('=== VERIFICANDO PERMISOS ===');
       await this.supabaseService.checkDatabasePermissions();
-      
+
       // Llamar al método de debug del servicio
       console.log('=== DEBUG GENERAL DE DATOS ===');
       await this.supabaseService.debugSalesData();
-      
+
       // Intentar cargar ventas de hoy directamente
       console.log('=== PROBANDO loadTodaySales ===');
       await this.loadTodaySales();
       console.log('Ventas del día cargadas:', this.todaySales.length);
       console.log('Detalles de ventas cargados:', Object.keys(this.saleDetails).length);
-      
+
       // Probar con fechas diferentes
       console.log('=== PROBANDO FECHAS ESPECÍFICAS ===');
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      
+
       const yesterdaySales = await this.supabaseService.getSalesByDateAndSorteo(yesterday, '');
       console.log('Ventas de ayer:', yesterdaySales.length);
-      
+
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      
+
       const tomorrowSales = await this.supabaseService.getSalesByDateAndSorteo(tomorrow, '');
       console.log('Ventas de mañana:', tomorrowSales.length);
-      
+
       // Verificar estado de ventas recientes
       console.log('=== ESTADO DE VENTAS RECIENTES ===');
       console.log('recentSales length:', this.recentSales.length);
       console.log('todaySales length:', this.todaySales.length);
-      
+
       // Probar refresh forzado
       console.log('=== PROBANDO REFRESH FORZADO ===');
       await this.loadRecentSales();
       console.log('Después del refresh - recentSales:', this.recentSales.length);
-      
+
     } catch (error) {
       console.error('Error en debug de sucursal:', error);
     }

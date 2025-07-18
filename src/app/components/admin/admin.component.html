@@ -1,4 +1,4 @@
-<!-- PANEL DE ADMINISTRACIÓN CON ESTILO MINIMALISTA -->
+<!-- PANEL DE ADMINISTRACIÓN CON ACORDEÓN -->
 <div class="admin-interface">
   <!-- Header -->
   <div class="header-bar">
@@ -11,7 +11,7 @@
     </button>
   </div>
 
-  <!-- Filtros de Fecha (similar al header de sucursal) -->
+  <!-- Filtros de Fecha -->
   <div class="filters-bar">
     <div class="filter-group">
       <label for="fechaDesde">Desde:</label>
@@ -47,7 +47,7 @@
   <!-- Contenido Principal -->
   <div class="main-content">
     
-    <!-- Cards de Resumen con estilo minimalista -->
+    <!-- Cards de Resumen -->
     <div class="summary-cards">
       <div class="summary-card vendido">
         <div class="card-icon">
@@ -220,72 +220,20 @@
       </ng-template>
     </div>
 
-    <!-- Sección de Gestión de Usuarios -->
-    <div class="users-section">
-      <div class="section-header">
-        <h3><i class="fas fa-users"></i> Gestión de Usuarios</h3>
-        <div class="section-actions">
-          <button class="btn-action btn-primary" (click)="createUser()" [disabled]="isLoading">
-            <i class="fas fa-plus"></i> Nuevo Usuario
-          </button>
-        </div>
-      </div>
-      
-      <div class="users-table-container" *ngIf="users.length > 0; else noUsers">
-        <div class="users-table">
-          <div class="table-header">
-            <div class="col-email">Email</div>
-            <div class="col-role">Rol</div>
-            <div class="col-sucursal">Sucursal</div>
-            <div class="col-status">Estado</div>
-            <div class="col-acciones">Acciones</div>
-          </div>
-          
-          <div class="table-body">
-            <div *ngFor="let user of users; trackBy: trackByUser" class="table-row">
-              <div class="col-email">{{ user.email }}</div>
-              <div class="col-role">{{ user.role === 'admin' ? 'Administrador' : 'Sucursal' }}</div>
-              <div class="col-sucursal">{{ user.sucursal || '-' }}</div>
-              <div class="col-status">
-                <span class="status-badge" [class.active]="user.active" [class.inactive]="!user.active">
-                  {{ user.active ? 'Activo' : 'Inactivo' }}
-                </span>
-              </div>
-              <div class="col-acciones">
-                <button class="btn-table-action" (click)="editUser(user)" title="Editar">
-                  <i class="fas fa-edit"></i>
-                </button>
-                <button class="btn-table-action danger" (click)="toggleUserStatus(user)" title="Cambiar estado">
-                  <i class="fas" [class.fa-toggle-on]="user.active" [class.fa-toggle-off]="!user.active"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <ng-template #noUsers>
-        <div class="no-data-message">
-          <i class="fas fa-users-slash"></i>
-          <h4>No hay usuarios registrados</h4>
-          <p>Crea el primer usuario para comenzar</p>
-        </div>
-      </ng-template>
-    </div>
-
   </div>
 </div>
 
 <!-- Modal para crear/editar usuario -->
-<div class="modal" [style.display]="showUserModal ? 'flex' : 'none'" [class.show]="showUserModal">
-  <div class="modal-dialog">
+<div class="modal fade" [class.show]="showUserModal" [style.display]="showUserModal ? 'block' : 'none'" 
+     tabindex="-1" role="dialog" (click)="showUserModal && $event.target === $event.currentTarget && closeUserModal()">
+  <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
           <i class="fas fa-user"></i> {{ editingUser ? 'Editar Usuario' : 'Crear Usuario' }}
         </h5>
-        <button type="button" class="close" (click)="closeUserModal()">
-          <span>&times;</span>
+        <button type="button" class="btn-close" aria-label="Close" (click)="closeUserModal()">
+          <span aria-hidden="true">&times;</span>
         </button>
       </div>
       <div class="modal-body">
@@ -295,6 +243,13 @@
             <input type="email" id="userEmail" class="form-input" required
                    [(ngModel)]="userFormData.email" name="email" 
                    placeholder="usuario@ejemplo.com">
+          </div>
+
+          <div class="form-group">
+            <label for="userName">Nombre:</label>
+            <input type="text" id="userName" class="form-input"
+                   [(ngModel)]="userFormData.nombre" name="nombre" 
+                   placeholder="Nombre completo del usuario">
           </div>
           
           <div class="form-group" *ngIf="!editingUser">
@@ -336,6 +291,50 @@
         <button type="button" class="btn-modal btn-primary" (click)="saveUser()" 
                 [disabled]="!userForm.valid || isLoading">
           <i class="fas fa-save"></i> {{ editingUser ? 'Actualizar' : 'Crear' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+
+<!-- Modal para cambiar contraseña de usuario -->
+<div class="modal fade" [class.show]="showPasswordModal" [style.display]="showPasswordModal ? 'block' : 'none'" 
+     tabindex="-1" role="dialog" (click)="showPasswordModal && $event.target === $event.currentTarget && closePasswordModal()">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-key"></i> Cambiar Contraseña
+        </h5>
+        <button type="button" class="btn-close" aria-label="Close" (click)="closePasswordModal()">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form #passwordForm="ngForm">
+          <div class="form-group">
+            <label for="newPassword">Nueva Contraseña:</label>
+            <input type="password" id="newPassword" class="form-input" required
+                   [(ngModel)]="newPassword" name="newPassword" 
+                   placeholder="Ingrese la nueva contraseña">
+          </div>
+          
+          <div class="form-group">
+            <label for="confirmPassword">Confirmar Contraseña:</label>
+            <input type="password" id="confirmPassword" class="form-input" required
+                   [(ngModel)]="confirmPassword" name="confirmPassword" 
+                   placeholder="Confirme la nueva contraseña">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-modal btn-secondary" (click)="closePasswordModal()">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+        <button type="button" class="btn-modal btn-primary" (click)="changeUserPassword()" 
+                [disabled]="!passwordForm.valid || newPassword !== confirmPassword || isLoading">
+          <i class="fas fa-save"></i> Cambiar Contraseña
         </button>
       </div>
     </div>
