@@ -187,15 +187,22 @@ export class AdminComponent implements OnInit {
     try {
       this.isLoading = true;
       console.log('=== CARGANDO VENTAS CON DATE-FNS Y HONDURAS TIMEZONE ===');
+      console.log('FechaDesde:', this.fechaDesde);
+      console.log('FechaHasta:', this.fechaHasta);
+      console.log('SelectedDate:', this.selectedDate);
+      console.log('SelectedSorteoFilter:', this.selectedSorteoFilter);
       
-      // Determinar fechas para filtrar
+      // Si hay filtros de rango de fechas, usar el método de rango
+      if (this.fechaDesde && this.fechaHasta) {
+        console.log('=== USANDO FILTRO DE RANGO DE FECHAS ===');
+        await this.loadSalesByDateRange();
+        return;
+      }
+      
+      // Determinar fecha para consulta individual
       let fechaParaConsulta: Date;
       
-      if (this.fechaDesde && this.fechaHasta) {
-        // Si hay filtros de rango, usar fecha desde por ahora (mejorará en siguientes iteraciones)
-        fechaParaConsulta = startOfDay(new Date(this.fechaDesde));
-        console.log('Usando filtro de rango - fecha desde:', this.fechaDesde);
-      } else if (this.selectedDate) {
+      if (this.selectedDate) {
         // Si hay fecha seleccionada, usar esa fecha
         fechaParaConsulta = new Date(this.selectedDate);
         console.log('Usando fecha seleccionada:', this.selectedDate);
@@ -356,12 +363,28 @@ export class AdminComponent implements OnInit {
     console.log('=== APLICANDO FILTROS CON DATE-FNS ===');
     console.log('FechaDesde:', this.fechaDesde);
     console.log('FechaHasta:', this.fechaHasta);
+    console.log('SelectedDate:', this.selectedDate);
     console.log('Sorteo filtro:', this.selectedSorteoFilter);
+    
+    // Validar que las fechas sean válidas
+    if (this.fechaDesde && this.fechaHasta) {
+      const fechaDesde = new Date(this.fechaDesde);
+      const fechaHasta = new Date(this.fechaHasta);
+      
+      if (fechaDesde > fechaHasta) {
+        this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
+        return;
+      }
+      
+      console.log('=== USANDO FILTRO DE RANGO ===');
+      console.log('Desde:', fechaDesde);
+      console.log('Hasta:', fechaHasta);
+    }
     
     // Guardar estado de filtros
     this.saveFilterState();
     
-    // Simplemente recargar ventas, el método loadSales manejará los filtros
+    // Recargar ventas
     this.loadSales();
   }
 
@@ -390,24 +413,52 @@ export class AdminComponent implements OnInit {
   }
 
   onFiltroFechaChange(): void {
+    console.log('=== CAMBIO EN FILTRO DE FECHA ===');
+    console.log('FechaDesde actual:', this.fechaDesde);
+    console.log('FechaHasta actual:', this.fechaHasta);
+    
     // Auto-aplicar filtros cuando cambian las fechas
     this.aplicarFiltros();
   }
 
   onDateChange(): void {
+    console.log('=== CAMBIO EN FECHA SELECCIONADA ===');
+    console.log('SelectedDate:', this.selectedDate);
+    
     // Guardar cambio de fecha y recargar
     this.saveFilterState();
     this.loadSales();
   }
 
   onSorteoFilterChange(): void {
+    console.log('=== CAMBIO EN FILTRO DE SORTEO ===');
+    console.log('SelectedSorteoFilter:', this.selectedSorteoFilter);
+    
     // Guardar cambio de sorteo y recargar
     this.saveFilterState();
     this.loadSales();
   }
 
+  // Método específico para cuando cambia fechaDesde
+  onFechaDesdeChange(): void {
+    console.log('=== CAMBIO EN FECHA DESDE ===');
+    console.log('Nueva fechaDesde:', this.fechaDesde);
+    this.aplicarFiltros();
+  }
+
+  // Método específico para cuando cambia fechaHasta
+  onFechaHastaChange(): void {
+    console.log('=== CAMBIO EN FECHA HASTA ===');
+    console.log('Nueva fechaHasta:', this.fechaHasta);
+    this.aplicarFiltros();
+  }
+
   async loadSalesByDateRange(): Promise<void> {
-    if (!this.fechaDesde || !this.fechaHasta) return;
+    if (!this.fechaDesde || !this.fechaHasta) {
+      console.log('No hay fechas de rango definidas, cargando ventas del día');
+      await this.loadSingleDateSales();
+      return;
+    }
 
     this.isLoading = true;
     try {
@@ -419,24 +470,47 @@ export class AdminComponent implements OnInit {
       
       console.log('Fecha desde (startOfDay):', fechaDesdeObj);
       console.log('Fecha hasta (endOfDay):', fechaHastaObj);
+      console.log('Formato para mostrar - Desde:', this.supabaseService.formatHondurasDateTime(fechaDesdeObj));
+      console.log('Formato para mostrar - Hasta:', this.supabaseService.formatHondurasDateTime(fechaHastaObj));
+      
+      // Validar que la fecha desde no sea mayor que la fecha hasta
+      if (fechaDesdeObj > fechaHastaObj) {
+        this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
+        this.sales = [];
+        return;
+      }
       
       // Cargar ventas para cada día en el rango
       let allSales: Sale[] = [];
       let currentDate = new Date(fechaDesdeObj);
+      let daysProcessed = 0;
+      const maxDays = 31; // Límite de seguridad
       
-      while (currentDate <= fechaHastaObj) {
+      while (currentDate <= fechaHastaObj && daysProcessed < maxDays) {
+        console.log(`Cargando ventas para el día: ${this.supabaseService.formatHondurasDateTime(currentDate)}`);
+        
         const daySales = await this.supabaseService.getSalesByDateAndSorteo(currentDate, this.selectedSorteoFilter);
+        console.log(`Ventas encontradas para ${currentDate.toDateString()}:`, daySales.length);
+        
         allSales = [...allSales, ...daySales];
         
-        // Avanzar al siguiente día usando date-fns
+        // Avanzar al siguiente día
         currentDate = new Date(currentDate);
         currentDate.setDate(currentDate.getDate() + 1);
+        daysProcessed++;
+      }
+
+      if (daysProcessed >= maxDays) {
+        console.warn('Se alcanzó el límite máximo de días procesados (31)');
+        this.notificationService.showInfo('Se procesaron los primeros 31 días del rango');
       }
 
       // Forzar actualización del array
       this.sales = [...allSales];
       
+      console.log('=== RESULTADO DEL FILTRO POR RANGO ===');
       console.log('Total ventas en rango:', this.sales.length);
+      console.log('Días procesados:', daysProcessed);
       
       // Cargar detalles de todas las ventas
       for (const sale of this.sales) {
@@ -446,13 +520,30 @@ export class AdminComponent implements OnInit {
       // Forzar detección de cambios
       this.cdr.detectChanges();
       
+      console.log('=== VENTAS CARGADAS EXITOSAMENTE ===');
+      
     } catch (error) {
       console.error('Error cargando ventas por rango:', error);
-      this.notificationService.showError('Error al cargar las ventas');
+      this.notificationService.showError('Error al cargar las ventas: ' + error);
       this.sales = [];
     } finally {
       this.isLoading = false;
     }
+  }
+
+  // Método auxiliar para cargar ventas de una sola fecha
+  private async loadSingleDateSales(): Promise<void> {
+    const fecha = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
+    console.log('Cargando ventas para fecha individual:', this.supabaseService.formatHondurasDateTime(fecha));
+    
+    this.sales = await this.supabaseService.getSalesByDateAndSorteo(fecha, this.selectedSorteoFilter);
+    this.sales = [...(this.sales || [])];
+    
+    for (const sale of this.sales) {
+      this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
+    }
+    
+    this.cdr.detectChanges();
   }
 
   // Gestión de usuarios
