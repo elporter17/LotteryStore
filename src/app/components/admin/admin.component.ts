@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { startOfDay, endOfDay } from 'date-fns';
 import { SupabaseService } from '../../services/supabase.service';
 import { SorteoService } from '../../services/sorteo.service';
 import { NotificationService } from '../../services/notification.service';
 import { PrintService } from '../../services/print.service';
 import { Router } from '@angular/router';
-import { SorteoSchedule, Sale, SaleDetail, Sorteo } from '../../models/interfaces';
+import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES } from '../../models/interfaces';
 
 @Component({
   selector: 'app-admin',
@@ -22,6 +23,7 @@ export class AdminComponent implements OnInit {
   selectedSorteoFilter: string = '';
   isLoading: boolean = false;
   selectedDate: string = '';
+  
 
   // Nuevas propiedades para las mejoras
   fechaDesde: string = '';
@@ -40,12 +42,8 @@ export class AdminComponent implements OnInit {
   // Propiedades para gestión de sorteos
   showSorteoModal: boolean = false;
   editingSorteo: any = null;
-  sorteoFormData: any = {
-    name: '',
-    label: '',
-    close_time: ''
-  };
-  sorteoSchedules: any[] = [];
+   
+   sorteoSchedules: SorteoSchedule[] = [...SORTEO_SCHEDULES];
 
   // Propiedades para cambio de contraseña
   showPasswordModal: boolean = false;
@@ -62,8 +60,10 @@ export class AdminComponent implements OnInit {
     private sorteoService: SorteoService,
     private notificationService: NotificationService,
     public printService: PrintService,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) {
+    // Inicializar fechas usando date-fns para filtros
     const hondurasToday = this.supabaseService.getHondurasDateTime();
     this.selectedDate = hondurasToday.toISOString().split('T')[0];
     
@@ -71,14 +71,54 @@ export class AdminComponent implements OnInit {
     console.log('Fecha Honduras:', this.supabaseService.formatHondurasDateTime(hondurasToday));
     console.log('SelectedDate:', this.selectedDate);
     
-    // Inicializar fechas para filtros usando Honduras timezone
-    const startOfDay = new Date(hondurasToday);
-    startOfDay.setHours(0, 0, 0, 0);
-    this.fechaDesde = startOfDay.toISOString().slice(0, 16);
+    // Recuperar filtros de localStorage o usar valores por defecto
+    this.loadFilterState();
     
-    const endOfDay = new Date(hondurasToday);
-    endOfDay.setHours(23, 59, 59, 999);
-    this.fechaHasta = endOfDay.toISOString().slice(0, 16);
+    // Si no hay filtros guardados, usar date-fns para inicializar
+    if (!this.fechaDesde || !this.fechaHasta) {
+      const fechaInicio = startOfDay(hondurasToday);
+      const fechaFin = endOfDay(hondurasToday);
+      
+      this.fechaDesde = this.formatDateTimeLocal(fechaInicio);
+      this.fechaHasta = this.formatDateTimeLocal(fechaFin);
+    }
+    
+    console.log('=== FECHAS INICIALIZADAS CON DATE-FNS ===');
+    console.log('Fecha desde:', this.fechaDesde);
+    console.log('Fecha hasta:', this.fechaHasta);
+  }
+
+  // Método para cargar estado de filtros desde localStorage
+  private loadFilterState(): void {
+    try {
+      const savedFilters = localStorage.getItem('admin-filters');
+      if (savedFilters) {
+        const filters = JSON.parse(savedFilters);
+        this.fechaDesde = filters.fechaDesde || '';
+        this.fechaHasta = filters.fechaHasta || '';
+        this.selectedSorteoFilter = filters.selectedSorteoFilter || '';
+        this.selectedDate = filters.selectedDate || '';
+        console.log('=== FILTROS RECUPERADOS DE LOCALSTORAGE ===', filters);
+      }
+    } catch (error) {
+      console.warn('Error cargando filtros desde localStorage:', error);
+    }
+  }
+
+  // Método para guardar estado de filtros en localStorage
+  private saveFilterState(): void {
+    try {
+      const filters = {
+        fechaDesde: this.fechaDesde,
+        fechaHasta: this.fechaHasta,
+        selectedSorteoFilter: this.selectedSorteoFilter,
+        selectedDate: this.selectedDate
+      };
+      localStorage.setItem('admin-filters', JSON.stringify(filters));
+      console.log('=== FILTROS GUARDADOS EN LOCALSTORAGE ===', filters);
+    } catch (error) {
+      console.warn('Error guardando filtros en localStorage:', error);
+    }
   }
 
   ngOnInit(): void {
@@ -145,21 +185,56 @@ export class AdminComponent implements OnInit {
 
   async loadSales(): Promise<void> {
     try {
-      console.log('=== CARGANDO VENTAS CON HONDURAS TIMEZONE ===');
-      const selectedDateObj = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
-      console.log('Fecha seleccionada:', this.supabaseService.formatHondurasDateTime(selectedDateObj));
+      this.isLoading = true;
+      console.log('=== CARGANDO VENTAS CON DATE-FNS Y HONDURAS TIMEZONE ===');
+      
+      // Determinar fechas para filtrar
+      let fechaParaConsulta: Date;
+      
+      if (this.fechaDesde && this.fechaHasta) {
+        // Si hay filtros de rango, usar fecha desde por ahora (mejorará en siguientes iteraciones)
+        fechaParaConsulta = startOfDay(new Date(this.fechaDesde));
+        console.log('Usando filtro de rango - fecha desde:', this.fechaDesde);
+      } else if (this.selectedDate) {
+        // Si hay fecha seleccionada, usar esa fecha
+        fechaParaConsulta = new Date(this.selectedDate);
+        console.log('Usando fecha seleccionada:', this.selectedDate);
+      } else {
+        // Por defecto, usar hoy
+        fechaParaConsulta = this.supabaseService.getHondurasDateTime();
+        console.log('Usando fecha de hoy por defecto');
+      }
+      
+      console.log('Fecha para consulta:', this.supabaseService.formatHondurasDateTime(fechaParaConsulta));
       console.log('Filtro de sorteo:', this.selectedSorteoFilter);
       
-      this.sales = await this.supabaseService.getSalesByDateAndSorteo(selectedDateObj, this.selectedSorteoFilter);
+      // Cargar ventas usando el método existente
+      this.sales = await this.supabaseService.getSalesByDateAndSorteo(
+        fechaParaConsulta,
+        this.selectedSorteoFilter
+      );
       
-      console.log('Ventas cargadas:', this.sales.length);
+      console.log('Ventas recibidas de Supabase:', this.sales?.length || 0);
+      
+      // Forzar actualización del array para trigger change detection
+      this.sales = [...(this.sales || [])];
       
       // Cargar detalles de cada venta
       for (const sale of this.sales) {
         this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
       }
+      
+      console.log('Ventas procesadas:', this.sales.length);
+      
+      // Forzar detección de cambios
+      this.cdr.detectChanges();
+      
     } catch (error) {
       console.error('Error cargando ventas:', error);
+      this.sales = [];
+      this.notificationService.showError('Error al cargar las ventas');
+    } finally {
+      this.isLoading = false;
     }
   }
 
@@ -278,24 +353,39 @@ export class AdminComponent implements OnInit {
 
   // Métodos para filtros de fecha
   aplicarFiltros(): void {
-    if (this.fechaDesde && this.fechaHasta) {
-      this.loadSalesByDateRange();
-    } else if (this.fechaDesde) {
-      this.selectedDate = this.fechaDesde;
-      this.loadSales();
-    } else {
-      this.loadSales();
-    }
+    console.log('=== APLICANDO FILTROS CON DATE-FNS ===');
+    console.log('FechaDesde:', this.fechaDesde);
+    console.log('FechaHasta:', this.fechaHasta);
+    console.log('Sorteo filtro:', this.selectedSorteoFilter);
+    
+    // Guardar estado de filtros
+    this.saveFilterState();
+    
+    // Simplemente recargar ventas, el método loadSales manejará los filtros
+    this.loadSales();
   }
 
   limpiarFiltros(): void {
+    console.log('=== LIMPIANDO FILTROS CON DATE-FNS ===');
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    this.fechaDesde = '';
-    this.fechaHasta = '';
+    
+    // Reinicializar fechas usando date-fns
+    const fechaInicio = startOfDay(hondurasToday);
+    const fechaFin = endOfDay(hondurasToday);
+    
+    this.fechaDesde = this.formatDateTimeLocal(fechaInicio);
+    this.fechaHasta = this.formatDateTimeLocal(fechaFin);
     this.selectedDate = hondurasToday.toISOString().split('T')[0];
     this.selectedSorteoFilter = '';
-    console.log('=== FILTROS LIMPIADOS CON HONDURAS TIMEZONE ===');
-    console.log('Nueva fecha seleccionada:', this.selectedDate);
+    
+    console.log('Filtros reiniciados:');
+    console.log('- FechaDesde:', this.fechaDesde);
+    console.log('- FechaHasta:', this.fechaHasta);
+    console.log('- SelectedDate:', this.selectedDate);
+    
+    // Guardar estado limpio
+    this.saveFilterState();
+    
     this.loadSales();
   }
 
@@ -304,33 +394,62 @@ export class AdminComponent implements OnInit {
     this.aplicarFiltros();
   }
 
+  onDateChange(): void {
+    // Guardar cambio de fecha y recargar
+    this.saveFilterState();
+    this.loadSales();
+  }
+
+  onSorteoFilterChange(): void {
+    // Guardar cambio de sorteo y recargar
+    this.saveFilterState();
+    this.loadSales();
+  }
+
   async loadSalesByDateRange(): Promise<void> {
     if (!this.fechaDesde || !this.fechaHasta) return;
 
     this.isLoading = true;
     try {
-      const fechaDesdeDate = new Date(this.fechaDesde);
-      const fechaHastaDate = new Date(this.fechaHasta);
+      console.log('=== CARGANDO VENTAS POR RANGO CON DATE-FNS ===');
+      
+      // Usar date-fns para manejar las fechas correctamente
+      const fechaDesdeObj = startOfDay(new Date(this.fechaDesde));
+      const fechaHastaObj = endOfDay(new Date(this.fechaHasta));
+      
+      console.log('Fecha desde (startOfDay):', fechaDesdeObj);
+      console.log('Fecha hasta (endOfDay):', fechaHastaObj);
       
       // Cargar ventas para cada día en el rango
       let allSales: Sale[] = [];
-      let currentDate = new Date(fechaDesdeDate);
+      let currentDate = new Date(fechaDesdeObj);
       
-      while (currentDate <= fechaHastaDate) {
+      while (currentDate <= fechaHastaObj) {
         const daySales = await this.supabaseService.getSalesByDateAndSorteo(currentDate, this.selectedSorteoFilter);
         allSales = [...allSales, ...daySales];
+        
+        // Avanzar al siguiente día usando date-fns
+        currentDate = new Date(currentDate);
         currentDate.setDate(currentDate.getDate() + 1);
       }
 
-      this.sales = allSales;
+      // Forzar actualización del array
+      this.sales = [...allSales];
+      
+      console.log('Total ventas en rango:', this.sales.length);
       
       // Cargar detalles de todas las ventas
       for (const sale of this.sales) {
         this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
       }
+      
+      // Forzar detección de cambios
+      this.cdr.detectChanges();
+      
     } catch (error) {
       console.error('Error cargando ventas por rango:', error);
       this.notificationService.showError('Error al cargar las ventas');
+      this.sales = [];
     } finally {
       this.isLoading = false;
     }
@@ -358,7 +477,7 @@ export class AdminComponent implements OnInit {
   async loadSorteoSchedules(): Promise<void> {
     try {
       console.log('Iniciando carga de horarios de sorteos...');
-      this.sorteoSchedules = await this.supabaseService.getSorteoSchedules();
+      this.sorteoSchedules = [...SORTEO_SCHEDULES];
       console.log('Horarios de sorteos cargados:', this.sorteoSchedules);
       
       if (this.sorteoSchedules.length === 0) {
@@ -454,14 +573,6 @@ export class AdminComponent implements OnInit {
     }
   }
 
-  onDateChange(): void {
-    this.loadSales();
-  }
-
-  onSorteoFilterChange(): void {
-    this.loadSales();
-  }
-
   generateDailyReport(): void {
     const reportDate = this.selectedDate ? new Date(this.selectedDate) : this.supabaseService.getHondurasDateTime();
     console.log('=== GENERANDO REPORTE DIARIO CON HONDURAS TIMEZONE ===');
@@ -509,6 +620,22 @@ export class AdminComponent implements OnInit {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  // Método para formatear fecha para inputs datetime-local
+  private formatDateTimeLocal(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  // Método para formatear fecha para mostrar en la UI
+  formatDateForDisplay(date: Date | string): string {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return this.supabaseService.formatHondurasDateTime(dateObj);
   }
 
   // Métodos faltantes para el template del admin
@@ -678,44 +805,6 @@ export class AdminComponent implements OnInit {
       this.factorMultiplicador[sorteoName] = +target.value;
     }
   }
-
-  // ========================
-  // GESTIÓN DE SORTEOS
-  // ========================
-
-  createSorteoSchedule(): void {
-    this.editingSorteo = null;
-    this.sorteoFormData = {
-      name: '',
-      label: '',
-      close_time: ''
-    };
-    this.showSorteoModal = true;
-  }
-
-  editSorteoSchedule(sorteo: any): void {
-    console.log('Editando sorteo:', sorteo);
-    this.editingSorteo = sorteo;
-    this.sorteoFormData = { 
-      name: sorteo.name,
-      label: sorteo.label,
-      close_time: sorteo.close_time
-    };
-    console.log('Datos del formulario:', this.sorteoFormData);
-    this.showSorteoModal = true;
-  }
-
-  closeSorteoModal(): void {
-    this.showSorteoModal = false;
-    this.editingSorteo = null;
-    this.sorteoFormData = {
-      name: '',
-      label: '',
-      close_time: ''
-    };
-  }
-
-
   // ========================
   // MÉTODOS DE DEBUG
   // ========================
@@ -747,16 +836,6 @@ export class AdminComponent implements OnInit {
 
   // ===== MÉTODOS PARA ABRIR MODALES =====
   
-  openCreateSorteoModal(): void {
-    this.editingSorteo = null;
-    this.sorteoFormData = {
-      name: '',
-      label: '',
-      close_time: ''
-    };
-    this.showSorteoModal = true;
-  }
-
   openCreateUserModal(): void {
     this.editingUser = null;
     this.userFormData = {
