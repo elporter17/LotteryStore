@@ -837,7 +837,7 @@ export class AdminComponent implements OnInit {
       
       if (this.editingUser) {
         // Actualizar usuario existente
-        await this.supabaseService.updateUser(this.editingUser.id, {
+        await this.supabaseService.updateExistingUser(this.editingUser.id, {
           email: this.userFormData.email,
           role: this.userFormData.role,
           sucursal: this.userFormData.sucursal,
@@ -846,7 +846,7 @@ export class AdminComponent implements OnInit {
         this.notificationService.showSuccess('Usuario actualizado exitosamente');
       } else {
         // Crear nuevo usuario
-        await this.supabaseService.createUser(this.userFormData);
+        await this.supabaseService.createNewUser(this.userFormData);
         this.notificationService.showSuccess('Usuario creado exitosamente');
       }
       
@@ -862,7 +862,7 @@ export class AdminComponent implements OnInit {
   async toggleUserStatus(user: any): Promise<void> {
     try {
       this.isLoading = true;
-      await this.supabaseService.toggleUserStatus(user.id);
+      await this.supabaseService.toggleExistingUserStatus(user.id);
       this.notificationService.showSuccess('Estado del usuario actualizado');
       await this.loadUsers();
     } catch (error) {
@@ -1232,6 +1232,11 @@ export class AdminComponent implements OnInit {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  // Navegar a la gestión de usuarios
+  navigateToUsers(): void {
+    this.router.navigate(['/admin/users']);
   }
 
 }

@@ -71,6 +71,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     this.userSubscription = this.supabaseService.currentUser$.subscribe(user => {
       this.currentUser = user;
+      console.log('Usuario actual - Sucursal:', this.currentUser?.sucursal);
       if (!user || user.role !== 'sucursal') {
         this.router.navigate(['/login']);
       }

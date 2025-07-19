@@ -7,6 +7,18 @@ export interface User {
   createdAt: Date;
 }
 
+export interface UserManagement {
+  id: string;
+  email: string;
+  role: 'admin' | 'sucursal';
+  sucursal?: string;
+  active: boolean;
+  createdAt: Date;
+  password?: string;
+  raw_user_meta_data?: any;
+  created_at?: string;
+}
+
 export interface Sale {
   id: string;
   userId: string;

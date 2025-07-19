@@ -1,0 +1,189 @@
+<div class="user-management-container">
+  <div class="header">
+    <div class="header-left">
+      <button class="btn-secondary" 
+              (click)="goToMainMenu()" 
+              [disabled]="isLoading"
+              title="Regresar al menú principal">
+        <i class="fas fa-arrow-left"></i> Menú Principal
+      </button>
+      <h2>Gestión de Usuarios</h2>
+    </div>
+    <button class="btn-primary" 
+            (click)="openCreateUserModal()" 
+            [disabled]="isLoading"
+            title="Crear nuevo usuario">
+      <i class="fas fa-plus"></i> Crear Usuario
+    </button>
+  </div>
+
+  <!-- Tabla de usuarios -->
+  <div class="users-table-container">
+    <table class="users-table" *ngIf="!isLoading && users.length > 0">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Rol</th>
+          <th>Sucursal</th>
+          <th>Estado</th>
+          <th>Fecha Creación</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let user of users; trackBy: trackByUserId">
+          <td>{{ user.email }}</td>
+          <td>
+            <span class="role-badge" [class]="'role-' + user.role">
+              {{ getRoleLabel(user.role) }}
+            </span>
+          </td>
+          <td>{{ user.sucursal || '-' }}</td>
+          <td>
+            <span class="status-badge" [class]="getStatusClass(user.active)">
+              {{ getStatusLabel(user.active) }}
+            </span>
+          </td>
+          <td>{{ user.created_at | date:'dd/MM/yyyy' }}</td>
+          <td class="actions-cell">
+            <button class="btn-icon btn-edit" 
+                    (click)="openEditUserModal(user)" 
+                    [disabled]="isLoading"
+                    title="Editar usuario">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn-icon btn-toggle" 
+                    (click)="toggleUserStatus(user)" 
+                    [disabled]="isLoading"
+                    [title]="user.active ? 'Desactivar usuario' : 'Activar usuario'">
+              <i class="fas" [class]="user.active ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+            <button class="btn-icon btn-delete" 
+                    (click)="deleteUser(user)" 
+                    [disabled]="isLoading"
+                    title="Eliminar usuario">
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Estado de carga -->
+    <div class="loading-state" *ngIf="isLoading">
+      <i class="fas fa-spinner fa-spin"></i>
+      <p>Cargando usuarios...</p>
+    </div>
+
+    <!-- Estado vacío -->
+    <div class="empty-state" *ngIf="!isLoading && users.length === 0">
+      <i class="fas fa-users"></i>
+      <h3>No hay usuarios registrados</h3>
+      <p>Comience creando el primer usuario del sistema</p>
+      <button class="btn-primary" (click)="openCreateUserModal()">
+        <i class="fas fa-plus"></i> Crear Primer Usuario
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para crear/editar usuario -->
+<div class="modal-overlay" *ngIf="showUserModal" (click)="closeUserModal()">
+  <div class="modal-container" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ isEditMode ? 'Editar Usuario' : 'Crear Usuario' }}</h3>
+      <button class="btn-close" (click)="closeUserModal()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <form class="user-form">
+        <!-- Email -->
+        <div class="form-group">
+          <label for="email">Email *</label>
+          <input type="email" 
+                 id="email" 
+                 [(ngModel)]="userForm.email" 
+                 name="email"
+                 [disabled]="isEditMode"
+                 placeholder="ejemplo@correo.com"
+                 required>
+        </div>
+
+        <!-- Contraseña -->
+        <div class="form-group">
+          <label for="password">
+            Contraseña {{ isEditMode ? '(dejar vacío para mantener actual)' : '*' }}
+          </label>
+          <input type="password" 
+                 id="password" 
+                 [(ngModel)]="userForm.password" 
+                 name="password"
+                 placeholder="Mínimo 6 caracteres"
+                 [required]="!isEditMode">
+        </div>
+
+        <!-- Confirmar Contraseña (siempre mostrar para usuarios nuevos, o si hay contraseña para editar) -->
+        <div class="form-group" *ngIf="!isEditMode || userForm.password">
+          <label for="confirmPassword">Confirmar Contraseña *</label>
+          <input type="password" 
+                 id="confirmPassword" 
+                 [(ngModel)]="userForm.confirmPassword" 
+                 name="confirmPassword"
+                 placeholder="Repetir la contraseña"
+                 [required]="!isEditMode || userForm.password">
+        </div>
+
+        <!-- Rol -->
+        <div class="form-group">
+          <label for="role">Rol *</label>
+          <select id="role" 
+                  [(ngModel)]="userForm.role" 
+                  name="role"
+                  required>
+            <option value="admin">Administrador</option>
+            <option value="sucursal">Vendedor</option>
+          </select>
+        </div>
+
+        <!-- Sucursal (solo para rol sucursal) -->
+        <div class="form-group" *ngIf="userForm.role === 'sucursal'">
+          <label for="sucursal">Sucursal *</label>
+          <input type="text" 
+                 id="sucursal" 
+                 [(ngModel)]="userForm.sucursal" 
+                 name="sucursal"
+                 placeholder="Ingrese el nombre de la sucursal"
+                 list="sucursales-list"
+                 required>
+          <datalist id="sucursales-list">
+            <option *ngFor="let sucursal of sucursalesSugeridas" [value]="sucursal">
+          </datalist>
+          <small class="form-help">Puedes escribir cualquier nombre o seleccionar una opción</small>
+        </div>
+
+        <!-- Estado activo -->
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" 
+                   [(ngModel)]="userForm.active" 
+                   name="active">
+            <span class="checkmark"></span>
+            Usuario activo
+          </label>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="closeUserModal()" [disabled]="isLoading">
+        Cancelar
+      </button>
+      <button class="btn-primary" (click)="saveUser()" [disabled]="isLoading">
+        <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+        {{ isEditMode ? 'Actualizar' : 'Crear' }} Usuario
+      </button>
+    </div>
+  </div>
+</div>

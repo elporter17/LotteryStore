@@ -7,9 +7,15 @@
       <h2><i class="fas fa-cog"></i> Panel de Administración</h2>
     </div>
     
-    <button class="btn-header btn-cerrar" (click)="logout()" [disabled]="isLoading">
-      <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-    </button>
+    <div class="header-actions">
+      <button class="btn-header btn-users" (click)="navigateToUsers()" [disabled]="isLoading">
+        <i class="fas fa-users"></i> Gestión de Usuarios
+      </button>
+      
+      <button class="btn-header btn-cerrar" (click)="logout()" [disabled]="isLoading">
+        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+      </button>
+    </div>
   </div>
 
   <!-- Filtros de Fecha -->

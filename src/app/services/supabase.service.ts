@@ -26,12 +26,17 @@ export class SupabaseService {
     // Escuchar cambios en la autenticación
     this.supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user && session.user.email) {
-        // Determinar rol basado en email
+        // Obtener sucursal del metadata si existe, sino usar método por email
+        const userMetadata = (session.user as any).user_metadata || {};
+        const rawMetadata = (session.user as any).raw_user_meta_data || {};
+        const metaSucursal = userMetadata.sucursal || rawMetadata.sucursal;
+        const metaRole = userMetadata.role || rawMetadata.role;
+        
         const userData: User = {
           id: session.user.id,
           email: session.user.email,
-          role: session.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
-          sucursal: this.getSucursalFromEmail(session.user.email),
+          role: metaRole || (session.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal'),
+          sucursal: metaSucursal || this.getSucursalFromEmail(session.user.email),
           active: true,
           createdAt: new Date()
         };
@@ -54,12 +59,17 @@ export class SupabaseService {
       }
       
       if (session?.user && session.user.email) {
-        // Determinar rol correctamente basado en el email
+        // Obtener sucursal del metadata si existe, sino usar método por email
+        const userMetadata = (session.user as any).user_metadata || {};
+        const rawMetadata = (session.user as any).raw_user_meta_data || {};
+        const metaSucursal = userMetadata.sucursal || rawMetadata.sucursal;
+        const metaRole = userMetadata.role || rawMetadata.role;
+        
         const userData: User = {
           id: session.user.id,
           email: session.user.email,
-          role: session.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
-          sucursal: this.getSucursalFromEmail(session.user.email),
+          role: metaRole || (session.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal'),
+          sucursal: metaSucursal || this.getSucursalFromEmail(session.user.email),
           active: true,
           createdAt: new Date()
         };
@@ -117,12 +127,17 @@ export class SupabaseService {
       }
 
       if (data.user && data.user.email) {
-        // Crear datos del usuario basado en el email
+        // Obtener sucursal del metadata si existe, sino usar método por email
+        const userMetadata = (data.user as any).user_metadata || {};
+        const rawMetadata = (data.user as any).raw_user_meta_data || {};
+        const metaSucursal = userMetadata.sucursal || rawMetadata.sucursal;
+        const metaRole = userMetadata.role || rawMetadata.role;
+        
         const userData: User = {
           id: data.user.id,
           email: data.user.email,
-          role: data.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal',
-          sucursal: this.getSucursalFromEmail(data.user.email),
+          role: metaRole || (data.user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal'),
+          sucursal: metaSucursal || this.getSucursalFromEmail(data.user.email),
           active: true,
           createdAt: new Date()
         };
@@ -951,146 +966,6 @@ export class SupabaseService {
     }
   }
 
-  async createUser(userData: { email: string, password: string, role: string, sucursal?: string }): Promise<User> {
-    try {
-      // Crear usuario en auth
-      const { data: authData, error: authError } = await this.supabase.auth.signUp({
-        email: userData.email,
-        password: userData.password
-      });
-
-      if (authError) {
-        throw authError;
-      }
-
-      if (!authData.user) {
-        throw new Error('No se pudo crear el usuario');
-      }
-
-      // Crear perfil de usuario en la tabla profiles
-      const userProfile = {
-        id: authData.user.id,
-        email: userData.email,
-        role: userData.role,
-        sucursal: userData.sucursal || '',
-        active: true,
-        created_at: new Date().toISOString()
-      };
-
-      const { data, error } = await this.supabase
-        .from('profiles')
-        .insert([userProfile])
-        .select()
-        .single();
-
-      if (error) {
-        // Si falla, aún podemos retornar el usuario creado
-        return {
-          id: authData.user.id,
-          email: userData.email,
-          role: userData.role as 'admin' | 'sucursal',
-          sucursal: userData.sucursal || '',
-          active: true,
-          createdAt: new Date()
-        };
-      }
-
-      return {
-        id: data.id,
-        email: data.email,
-        role: data.role,
-        sucursal: data.sucursal || '',
-        active: data.active,
-        createdAt: new Date(data.created_at)
-      };
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async updateUser(userId: string, updates: Partial<User>): Promise<User> {
-    try {
-      // Convertir el objeto updates al formato de la tabla profiles
-      const profileUpdates: any = {};
-      if (updates.email) profileUpdates.email = updates.email;
-      if (updates.role) profileUpdates.role = updates.role;
-      if (updates.sucursal !== undefined) profileUpdates.sucursal = updates.sucursal;
-      if (updates.active !== undefined) profileUpdates.active = updates.active;
-
-      const { data, error } = await this.supabase
-        .from('profiles')
-        .update(profileUpdates)
-        .eq('id', userId)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      return {
-        id: data.id,
-        email: data.email,
-        role: data.role,
-        sucursal: data.sucursal || '',
-        active: data.active,
-        createdAt: new Date(data.created_at)
-      };
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async toggleUserStatus(userId: string): Promise<User> {
-    try {
-      // Primero obtener el estado actual
-      const { data: currentUser, error: fetchError } = await this.supabase
-        .from('profiles')
-        .select('active')
-        .eq('id', userId)
-        .single();
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      // Cambiar el estado
-      const newStatus = !currentUser.active;
-      return await this.updateUser(userId, { active: newStatus });
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async deleteUser(userId: string): Promise<void> {
-    try {
-      const { error } = await this.supabase
-        .from('users')
-        .delete()
-        .eq('id', userId);
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async updateUserPassword(userId: string, newPassword: string): Promise<void> {
-    try {
-      const { error } = await this.supabase.auth.updateUser({
-        password: newPassword
-      });
-
-      if (error) {
-        throw error;
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
-
   // ========================
   // GESTIÓN DE SORTEOS
   // ========================
@@ -1260,6 +1135,257 @@ export class SupabaseService {
   parseDateFromDatabase(isoString: string): Date {
     const utcDate = parseISO(isoString);
     return toZonedTime(utcDate, this.HONDURAS_TIMEZONE);
+  }
+
+  // ============= MÉTODOS DE GESTIÓN DE USUARIOS =============
+
+  // Obtener todos los usuarios del sistema desde auth.users
+  async getAllUsers(): Promise<User[]> {
+    try {
+      // Usar la API de administración para obtener usuarios de auth.users
+      const { data, error } = await this.supabase.auth.admin.listUsers();
+
+      console.log('Usuarios obtenidos:', data);
+      if (error) {
+        console.error('Error obteniendo usuarios:', error);
+        // Si falla, usar datos por defecto
+        return this.getDefaultUsersForManagement();
+      }
+
+      // Mapear los usuarios de auth a nuestro formato
+      return data.users.map((user: any) => ({
+        id: user.id,
+        email: user.email || '',
+        role: (user.user_metadata?.['role'] || (user.email === 'gerencia@loteria.com' ? 'admin' : 'sucursal')) as 'admin' | 'sucursal',
+        sucursal: user.user_metadata?.['sucursal'] || this.getSucursalFromEmail(user.email || ''),
+        active: user.user_metadata?.['active'] ?? !(user['banned_until']),
+        createdAt: new Date(user.created_at)
+      }));
+    } catch (error) {
+      console.error('Error al obtener usuarios:', error);
+      // Retornar usuarios por defecto si falla
+      return this.getDefaultUsersForManagement();
+    }
+  }
+
+  // Usuarios por defecto para gestión
+  private getDefaultUsersForManagement(): User[] {
+    return [
+      {
+        id: 'default-admin',
+        email: 'gerencia@loteria.com',
+        role: 'admin',
+        sucursal: '',
+        active: true,
+        createdAt: new Date()
+      },
+      {
+        id: 'default-venta1',
+        email: 'venta1@loteria.com',
+        role: 'sucursal',
+        sucursal: 'Sucursal 1',
+        active: true,
+        createdAt: new Date()
+      },
+      {
+        id: 'default-venta2',
+        email: 'venta2@loteria.com',
+        role: 'sucursal',
+        sucursal: 'Sucursal 2',
+        active: true,
+        createdAt: new Date()
+      }
+    ];
+  }
+
+  // Crear un nuevo usuario en el sistema usando auth.users
+  async createNewUser(userData: { email: string; role: 'admin' | 'sucursal'; sucursal?: string; active?: boolean }): Promise<User> {
+    try {
+      console.log('Creando usuario:', userData);
+      
+      // Crear usuario directamente en auth.users
+      const { data: authData, error: authError } = await this.supabase.auth.admin.createUser({
+        email: userData.email,
+        password: 'LoteriaTemporal123!', // Contraseña temporal
+        email_confirm: true,
+        user_metadata: {
+          role: userData.role,
+          sucursal: userData.sucursal || '',
+          active: userData.active !== undefined ? userData.active : true
+        }
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      console.log('Usuario creado exitosamente:', authData.user.email);
+
+      // Retornar el usuario en nuestro formato
+      return {
+        id: authData.user.id,
+        email: authData.user.email || '',
+        role: userData.role,
+        sucursal: userData.sucursal || '',
+        active: userData.active !== undefined ? userData.active : true,
+        createdAt: new Date(authData.user.created_at)
+      };
+    } catch (error) {
+      console.error('Error al crear usuario:', error);
+      throw error;
+    }
+  }
+
+  // Actualizar un usuario existente usando auth.users
+  async updateExistingUser(userId: string, updates: { email?: string; role?: 'admin' | 'sucursal'; sucursal?: string; active?: boolean }): Promise<User> {
+    try {
+      console.log('Actualizando usuario:', userId, updates);
+      
+      // Preparar los metadatos del usuario
+      const userMetadata: any = {};
+      if (updates.role) userMetadata['role'] = updates.role;
+      if (updates.sucursal !== undefined) userMetadata['sucursal'] = updates.sucursal;
+      if (updates.active !== undefined) userMetadata['active'] = updates.active;
+
+      // Actualizar en auth.users
+      const updateData: any = {};
+      if (updates.email) updateData.email = updates.email;
+      if (Object.keys(userMetadata).length > 0) updateData.user_metadata = userMetadata;
+      
+      // Si se quiere desactivar el usuario, usar ban
+      if (updates.active === false) {
+        updateData.ban_duration = '876000h'; // Ban muy largo para simular desactivación
+      } else if (updates.active === true) {
+        updateData.ban_duration = 'none'; // Remover ban
+      }
+
+      const { data, error } = await this.supabase.auth.admin.updateUserById(userId, updateData);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Usuario actualizado exitosamente:', data.user.email);
+
+      // Retornar el usuario actualizado en nuestro formato
+      return {
+        id: data.user.id,
+        email: data.user.email || '',
+        role: updates.role || (data.user.user_metadata?.['role'] as 'admin' | 'sucursal') || 'sucursal',
+        sucursal: updates.sucursal || data.user.user_metadata?.['sucursal'] || '',
+        active: updates.active !== undefined ? updates.active : !(data.user as any)['banned_until'],
+        createdAt: new Date(data.user.created_at)
+      };
+    } catch (error) {
+      console.error('Error al actualizar usuario:', error);
+      throw error;
+    }
+  }
+
+  // Eliminar un usuario usando auth.users
+  async deleteExistingUser(userId: string): Promise<void> {
+    try {
+      console.log('Eliminando usuario:', userId);
+      
+      const { error } = await this.supabase.auth.admin.deleteUser(userId);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Usuario eliminado exitosamente');
+    } catch (error) {
+      console.error('Error al eliminar usuario:', error);
+      throw error;
+    }
+  }
+
+  // Alternar el estado activo/inactivo de un usuario usando auth.users
+  async toggleExistingUserStatus(userId: string): Promise<User> {
+    try {
+      console.log('Alternando estado del usuario:', userId);
+      
+      // Primero obtener el usuario actual de auth.users
+      const { data: authUser, error: fetchError } = await this.supabase.auth.admin.getUserById(userId);
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Determinar el estado actual desde los metadatos o si está baneado
+      const currentActive = authUser.user.user_metadata?.['active'] ?? !(authUser.user as any)['banned_until'];
+      const newStatus = !currentActive;
+
+      // Actualizar el estado del usuario
+      const updateData: any = {
+        user_metadata: {
+          ...authUser.user.user_metadata,
+          ['active']: newStatus
+        }
+      };
+
+      // Si se está desactivando, ban el usuario
+      if (!newStatus) {
+        updateData.ban_duration = '876000h'; // Ban muy largo para simular desactivación
+      } else {
+        updateData.ban_duration = 'none'; // Remover ban
+      }
+
+      const { data, error } = await this.supabase.auth.admin.updateUserById(userId, updateData);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Estado del usuario alternado exitosamente:', newStatus ? 'Activo' : 'Inactivo');
+
+      return {
+        id: data.user.id,
+        email: data.user.email || '',
+        role: (data.user.user_metadata?.['role'] as 'admin' | 'sucursal') || 'sucursal',
+        sucursal: data.user.user_metadata?.['sucursal'] || '',
+        active: newStatus,
+        createdAt: new Date(data.user.created_at)
+      };
+    } catch (error) {
+      console.error('Error al alternar estado del usuario:', error);
+      throw error;
+    }
+  }
+
+  // Actualizar contraseña de un usuario usando auth.users
+  async updateUserPassword(userId: string, newPassword: string): Promise<void> {
+    try {
+      console.log('Actualizando contraseña del usuario:', userId);
+      
+      const { error } = await this.supabase.auth.admin.updateUserById(userId, {
+        password: newPassword
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Contraseña actualizada exitosamente');
+    } catch (error) {
+      console.error('Error al actualizar contraseña:', error);
+      throw error;
+    }
+  }
+
+  // Enviar email de restablecimiento de contraseña
+  async sendPasswordReset(email: string): Promise<void> {
+    try {
+      const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      throw error;
+    }
   }
 
 }

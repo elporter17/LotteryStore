@@ -8,6 +8,7 @@ import { AppComponent } from './app.component';
 import { LoginComponent } from './components/login/login.component';
 import { SucursalComponent } from './components/sucursal/sucursal.component';
 import { AdminComponent } from './components/admin/admin.component';
+import { UserManagementComponent } from './components/user-management/user-management.component';
 import { AuthGuard } from './guards/auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 
@@ -16,6 +17,7 @@ const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'sucursal', component: SucursalComponent, canActivate: [AuthGuard] },
   { path: 'admin', component: AdminComponent, canActivate: [AuthGuard, AdminGuard] },
+  { path: 'admin/users', component: UserManagementComponent, canActivate: [AuthGuard, AdminGuard] },
   { path: '**', redirectTo: '/login' }
 ];
 
@@ -24,7 +26,8 @@ const routes: Routes = [
     AppComponent,
     LoginComponent,
     SucursalComponent,
-    AdminComponent
+    AdminComponent,
+    UserManagementComponent
   ],
   imports: [
     BrowserModule,
