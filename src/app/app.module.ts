@@ -9,6 +9,7 @@ import { LoginComponent } from './components/login/login.component';
 import { SucursalComponent } from './components/sucursal/sucursal.component';
 import { AdminComponent } from './components/admin/admin.component';
 import { UserManagementComponent } from './components/user-management/user-management.component';
+import { ResumenSorteosComponent } from './components/resumen-sorteos/resumen-sorteos.component';
 import { AuthGuard } from './guards/auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 
@@ -33,7 +34,8 @@ const routes: Routes = [
     BrowserModule,
     CommonModule,
     FormsModule,
-    RouterModule.forRoot(routes)
+    RouterModule.forRoot(routes),
+    ResumenSorteosComponent
   ],
   providers: [ AuthGuard, AdminGuard],
   bootstrap: [AppComponent]

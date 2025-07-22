@@ -49,6 +49,14 @@ export interface Sorteo {
   totalPagado: number;
   gananciaNeta: number;
   cerrado: boolean;
+  sucursal?: string; // Nueva propiedad para sorteos por sucursal
+}
+
+export interface SucursalFactor {
+  sucursal: string;
+  factor: number;
+  usuario?: string;
+  email?: string;
 }
 
 export interface SorteoSchedule {

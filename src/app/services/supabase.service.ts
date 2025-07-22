@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
-import { User, Sale, SaleDetail, Sorteo, SorteoSchedule, SORTEO_SCHEDULES } from '../models/interfaces';
-import { Observable, BehaviorSubject } from 'rxjs';
+import { User, Sale, SaleDetail, Sorteo, SorteoSchedule, SORTEO_SCHEDULES, SucursalFactor } from '../models/interfaces';
+import { Observable, BehaviorSubject, Subject } from 'rxjs';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { es } from 'date-fns/locale';
@@ -14,6 +14,9 @@ export class SupabaseService {
   private supabase: SupabaseClient;
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
+  
+  // Subject para comunicación entre componentes
+  public resumenUpdateSubject = new Subject<void>();
 
 
 
@@ -481,20 +484,15 @@ export class SupabaseService {
     }
   }
 
-  // Método específico para verificar si un sorteo existe por ID
+  // Método específico para verificar si un sorteo existe por ID (maneja múltiples sucursales)
   async getSorteoById(sorteoId: string): Promise<Sorteo | null> {
     try {
       const { data, error } = await this.supabase
         .from('sorteos')
         .select('*')
-        .eq('id', sorteoId)
-        .single();
+        .eq('id', sorteoId);
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          // No se encontró el registro
-          return null;
-        }
         // Si es un error de permisos (406, RLS), lanzar para manejo especial
         if (error.code === '42501' || error.details?.includes('permission denied')) {
           throw { ...error, isRLSError: true };
@@ -502,20 +500,49 @@ export class SupabaseService {
         throw error;
       }
 
+      if (!data || data.length === 0) {
+        return null;
+      }
+
+      // Si hay múltiples sucursales, usar la primera para mostrar datos básicos
+      const firstRecord = data[0];
+      
       return {
-        id: data.id,
-        fecha: new Date(data.fecha),
-        sorteo: data.sorteo,
-        horaCierre: new Date(data.hora_cierre),
-        numeroGanador: data.numero_ganador || '',
-        factorMultiplicador: data.factor_multiplicador,
-        totalVendido: data.total_vendido,
-        totalPagado: data.total_pagado,
-        gananciaNeta: data.ganancia_neta,
-        cerrado: data.cerrado
+        id: firstRecord.id,
+        fecha: new Date(firstRecord.fecha),
+        sorteo: firstRecord.sorteo,
+        horaCierre: new Date(firstRecord.hora_cierre),
+        numeroGanador: firstRecord.numero_ganador || '',
+        factorMultiplicador: firstRecord.factor_multiplicador,
+        totalVendido: firstRecord.total_vendido,
+        totalPagado: firstRecord.total_pagado,
+        gananciaNeta: firstRecord.ganancia_neta,
+        cerrado: firstRecord.cerrado,
+        sucursal: firstRecord.sucursal
       } as Sorteo;
     } catch (error) {
       throw error;
+    }
+  }
+
+  // Nuevo método para obtener resumen de todas las sucursales de un sorteo
+  async getSorteoResumenPorSucursal(sorteoId: string): Promise<any[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('sorteos')
+        .select('sucursal, numero_ganador, factor_multiplicador, total_vendido, total_pagado, ganancia_neta')
+        .eq('id', sorteoId)
+        .order('sucursal');
+
+      if (error) {
+        console.error('Error al obtener resumen por sucursal:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error al obtener resumen por sucursal:', error);
+      return [];
     }
   }
 
@@ -1386,6 +1413,261 @@ export class SupabaseService {
     } catch (error) {
       throw error;
     }
+  }
+
+  // ========================
+  // GESTIÓN DE SORTEOS POR SUCURSAL
+  // ========================
+
+  // Obtener usuarios activos agrupados por sucursal
+  async getActiveUsersBySucursal(): Promise<SucursalFactor[]> {
+    try {
+      // Intentar usar la función SQL primero
+      const { data, error } = await this.supabase
+        .rpc('get_active_users_by_sucursal');
+
+      if (error) {
+        console.warn('Función get_active_users_by_sucursal falló, intentando consulta directa:', error);
+        
+        // Fallback: consulta directa a auth.users
+        const { data: usersData, error: usersError } = await this.supabase.auth.admin.listUsers();
+        
+        if (usersError) {
+          throw usersError;
+        }
+
+        // Procesar usuarios y agrupar por sucursal
+        const sucursalesMap = new Map<string, SucursalFactor>();
+        
+        for (const user of usersData.users) {
+          if (user.email === 'gerencia@loteria.com' || !user.email_confirmed_at || !user.email) {
+            continue;
+          }
+          
+          let sucursal = 'Principal';
+          if (user.user_metadata && user.user_metadata['sucursal']) {
+            sucursal = user.user_metadata['sucursal'];
+          } else if (user.email.includes('venta1')) {
+            sucursal = 'Sucursal 1';
+          } else if (user.email.includes('venta2')) {
+            sucursal = 'Sucursal 2';
+          } else if (user.email.includes('venta3')) {
+            sucursal = 'Sucursal 3';
+          } else if (user.email.includes('venta4')) {
+            sucursal = 'Sucursal 4';
+          }
+          
+          if (!sucursalesMap.has(sucursal)) {
+            sucursalesMap.set(sucursal, {
+              sucursal,
+              factor: 75,
+              usuario: user.id,
+              email: user.email || ''
+            });
+          }
+        }
+        
+        return Array.from(sucursalesMap.values());
+      }
+
+      return (data || []).map((user: any) => ({
+        sucursal: user.sucursal,
+        factor: user.factor_default,
+        usuario: user.user_id,
+        email: user.email
+      }));
+    } catch (error) {
+      console.error('Error al obtener usuarios por sucursal:', error);
+      // Fallback final con datos por defecto
+      return [
+        { sucursal: 'Sucursal 1', factor: 75, usuario: '', email: 'venta1@loteria.com' },
+        { sucursal: 'Sucursal 2', factor: 75, usuario: '', email: 'venta2@loteria.com' },
+        { sucursal: 'Sucursal 3', factor: 75, usuario: '', email: 'venta3@loteria.com' },
+        { sucursal: 'Sucursal 4', factor: 75, usuario: '', email: 'venta4@loteria.com' },
+        { sucursal: 'Principal', factor: 75, usuario: '', email: 'principal@loteria.com' }
+      ];
+    }
+  }
+
+  // Crear sorteos por sucursal con factores específicos
+  async crearSorteosPorSucursal(
+    sorteoId: string, 
+    numeroGanador: string, 
+    factoresPorSucursal: { [sucursal: string]: number }
+  ): Promise<void> {
+    try {
+      const numeroString = numeroGanador.toString().padStart(2, '0');
+      
+      const { data, error } = await this.supabase
+        .rpc('crear_sorteos_por_sucursal', {
+          p_sorteo_id: sorteoId,
+          p_numero_ganador: numeroString,
+          p_factores_json: factoresPorSucursal
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Sorteos creados por sucursal exitosamente');
+    } catch (error) {
+      console.error('Error al crear sorteos por sucursal:', error);
+      throw error;
+    }
+  }
+
+  // Calcular totales de sorteo por sucursal
+  async calcularTotalesSorteoPorSucursal(sorteoId: string): Promise<void> {
+    try {
+      const { data, error } = await this.supabase
+        .rpc('calcular_totales_sorteo_por_sucursal', {
+          p_sorteo_id: sorteoId
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Totales calculados por sucursal exitosamente');
+    } catch (error) {
+      console.error('Error al calcular totales por sucursal:', error);
+      throw error;
+    }
+  }
+
+  // Obtener sorteos por sucursal para una fecha y tipo específicos
+  async getSorteosPorSucursal(fecha: Date, sorteo: string): Promise<Sorteo[]> {
+    try {
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const sorteoId = `${fechaStr}-${sorteo}`;
+
+      const { data, error } = await this.supabase
+        .from('sorteos')
+        .select('*')
+        .eq('id', sorteoId)
+        .order('sucursal');
+
+      if (error) {
+        throw error;
+      }
+
+      return (data || []).map(item => ({
+        id: item.id,
+        fecha: new Date(item.fecha),
+        sorteo: item.sorteo,
+        horaCierre: new Date(item.hora_cierre),
+        numeroGanador: item.numero_ganador || '',
+        factorMultiplicador: item.factor_multiplicador,
+        totalVendido: item.total_vendido,
+        totalPagado: item.total_pagado,
+        gananciaNeta: item.ganancia_neta,
+        cerrado: item.cerrado,
+        sucursal: item.sucursal
+      }));
+    } catch (error) {
+      console.error('Error al obtener sorteos por sucursal:', error);
+      return [];
+    }
+  }
+
+  // Obtener resumen consolidado de un sorteo (todas las sucursales)
+  async getResumenConsolidadoSorteo(fecha: Date, sorteo: string): Promise<{
+    numeroGanador: string;
+    totalVendido: number;
+    totalPagado: number;
+    gananciaNeta: number;
+    cerrado: boolean;
+    detallesPorSucursal: any[];
+  }> {
+    try {
+      const sorteosPorSucursal = await this.getSorteosPorSucursal(fecha, sorteo);
+      
+      if (sorteosPorSucursal.length === 0) {
+        return {
+          numeroGanador: '',
+          totalVendido: 0,
+          totalPagado: 0,
+          gananciaNeta: 0,
+          cerrado: false,
+          detallesPorSucursal: []
+        };
+      }
+
+      const resumen = {
+        numeroGanador: sorteosPorSucursal[0].numeroGanador || '',
+        totalVendido: sorteosPorSucursal.reduce((sum, s) => sum + s.totalVendido, 0),
+        totalPagado: sorteosPorSucursal.reduce((sum, s) => sum + s.totalPagado, 0),
+        gananciaNeta: sorteosPorSucursal.reduce((sum, s) => sum + s.gananciaNeta, 0),
+        cerrado: sorteosPorSucursal.every(s => s.cerrado),
+        detallesPorSucursal: sorteosPorSucursal.map(s => ({
+          sucursal: s.sucursal,
+          factor: s.factorMultiplicador,
+          vendido: s.totalVendido,
+          pagado: s.totalPagado,
+          ganancia: s.gananciaNeta
+        }))
+      };
+
+      return resumen;
+    } catch (error) {
+      console.error('Error al obtener resumen consolidado:', error);
+      return {
+        numeroGanador: '',
+        totalVendido: 0,
+        totalPagado: 0,
+        gananciaNeta: 0,
+        cerrado: false,
+        detallesPorSucursal: []
+      };
+    }
+  }
+
+  /**
+   * Obtener ventas agrupadas por número para un sorteo específico en una fecha
+   */
+  async getVentasPorNumero(sorteoName: string, fecha: string): Promise<{ [numero: string]: number }> {
+    try {
+      const { data: ventas, error } = await this.supabase
+        .from('sales')
+        .select(`
+          details:sale_details(numero, monto)
+        `)
+        .eq('sorteo', sorteoName)
+        .gte('created_at', `${fecha}T00:00:00`)
+        .lt('created_at', `${fecha}T23:59:59`);
+
+      if (error) {
+        console.error('Error al obtener ventas por número:', error);
+        return {};
+      }
+
+      const ventasPorNumero: { [numero: string]: number } = {};
+
+      // Procesar todas las ventas y detalles
+      ventas?.forEach(venta => {
+        venta.details?.forEach((detalle: any) => {
+          const numero = detalle.numero.toString().padStart(2, '0');
+          const monto = detalle.monto || 0;
+          
+          if (!ventasPorNumero[numero]) {
+            ventasPorNumero[numero] = 0;
+          }
+          ventasPorNumero[numero] += monto;
+        });
+      });
+
+      return ventasPorNumero;
+    } catch (error) {
+      console.error('Error en getVentasPorNumero:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Notificar actualización de resúmenes
+   */
+  notifyResumenUpdate(): void {
+    this.resumenUpdateSubject.next();
   }
 
 }

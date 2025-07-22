@@ -1,0 +1,233 @@
+<!-- Sección de Resúmenes de Sorteos -->
+<div class="resumen-sorteos-section">
+  <div class="section-header">
+    <h3>
+      <i class="fas fa-chart-bar"></i> 
+      Resúmenes de Sorteos por Sucursales
+    </h3>
+    <div class="section-actions">
+      <button class="btn-refresh" (click)="loadResumenesSorteos()" [disabled]="isLoading">
+        <i class="fas fa-sync-alt" [class.fa-spin]="isLoading"></i>
+        Actualizar
+      </button>
+    </div>
+  </div>
+
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-content">
+      <i class="fas fa-spinner fa-spin"></i>
+      <span>Cargando resúmenes de sorteos...</span>
+    </div>
+  </div>
+
+  <div class="sorteos-resumen-container" *ngIf="!isLoading">
+    <div *ngIf="getSorteosConResumen().length === 0" class="no-resumen-message">
+      <div class="empty-state">
+        <i class="fas fa-chart-line"></i>
+        <h4>No hay sorteos cerrados</h4>
+        <p>Los resúmenes aparecerán aquí cuando se cierren los sorteos</p>
+      </div>
+    </div>
+
+    <!-- Card por cada sorteo cerrado -->
+    <div *ngFor="let sorteo of getSorteosConResumen()" class="sorteo-resumen-card">
+      <div class="card-header">
+        <div class="sorteo-info">
+          <h4>{{ sorteo.label }}</h4>
+          <span class="sorteo-time">{{ sorteo.closeTime }}</span>
+        </div>
+        <div class="winner-info">
+          <div class="winner-number">
+            <i class="fas fa-trophy"></i>
+            <span>{{ getNumeroGanador(sorteo.name) }}</span>
+          </div>
+          <div class="factor-info">Factor: {{ getFactorPrincipal(sorteo.name) }}x</div>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <!-- Estadísticas generales -->
+        <div class="stats-overview">
+          <div class="stat-card vendido">
+            <div class="stat-icon">
+              <i class="fas fa-coins"></i>
+            </div>
+            <div class="stat-content">
+              <div class="stat-label">Total Vendido</div>
+              <div class="stat-value">L {{ getTotalVendidoSorteo(sorteo.name) }}</div>
+            </div>
+          </div>
+          
+          <div class="stat-card pagado">
+            <div class="stat-icon">
+              <i class="fas fa-hand-holding-usd"></i>
+            </div>
+            <div class="stat-content">
+              <div class="stat-label">Total Pagado</div>
+              <div class="stat-value">L {{ getTotalPagadoSorteo(sorteo.name) }}</div>
+            </div>
+          </div>
+          
+          <div class="stat-card ganancia" 
+               [class.positive]="getGananciaTotalSorteo(sorteo.name) > 0"
+               [class.negative]="getGananciaTotalSorteo(sorteo.name) < 0">
+            <div class="stat-icon">
+              <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="stat-content">
+              <div class="stat-label">Ganancia Total</div>
+              <div class="stat-value">L {{ getGananciaTotalSorteo(sorteo.name).toFixed(2) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla detallada por sucursales -->
+        <div class="detalle-sucursales">
+          <h5>
+            <i class="fas fa-building"></i>
+            Detalle por Sucursales
+          </h5>
+          
+          <div class="tabla-resumen">
+            <div class="tabla-header">
+              <div class="col-sucursal">Sucursal</div>
+              <div class="col-factor">Factor</div>
+              <div class="col-vendido">Vendido</div>
+              <div class="col-pagado">Pagado</div>
+              <div class="col-ganancia">Ganancia</div>
+            </div>
+            
+            <div class="tabla-row" *ngFor="let sucursal of getResumenSorteo(sorteo.name)">
+              <div class="col-sucursal" [attr.data-label]="'Sucursal'">
+                <i class="fas fa-store"></i>
+                {{ sucursal.sucursal }}
+              </div>
+              <div class="col-factor" [attr.data-label]="'Factor'">
+                {{ sucursal.factor_multiplicador }}x
+              </div>
+              <div class="col-vendido" [attr.data-label]="'Vendido'">
+                L {{ sucursal.total_vendido?.toFixed(2) || '0.00' }}
+              </div>
+              <div class="col-pagado" [attr.data-label]="'Pagado'">
+                L {{ sucursal.total_pagado?.toFixed(2) || '0.00' }}
+              </div>
+              <div class="col-ganancia" [attr.data-label]="'Ganancia'"
+                   [class.positive]="(sucursal.ganancia_neta || 0) > 0"
+                   [class.negative]="(sucursal.ganancia_neta || 0) < 0">
+                L {{ sucursal.ganancia_neta?.toFixed(2) || '0.00' }}
+              </div>
+            </div>
+            
+            <!-- Total -->
+            <div class="tabla-footer">
+              <div class="col-sucursal"><strong>TOTAL GENERAL</strong></div>
+              <div class="col-factor">-</div>
+              <div class="col-vendido">
+                <strong>L {{ getTotalVendidoSorteo(sorteo.name) }}</strong>
+              </div>
+              <div class="col-pagado">
+                <strong>L {{ getTotalPagadoSorteo(sorteo.name) }}</strong>
+              </div>
+              <div class="col-ganancia"
+                   [class.positive]="getGananciaTotalSorteo(sorteo.name) > 0"
+                   [class.negative]="getGananciaTotalSorteo(sorteo.name) < 0">
+                <strong>L {{ getGananciaTotalSorteo(sorteo.name).toFixed(2) }}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cuadro resumen de ventas por número -->
+        <div class="ventas-por-numero" *ngIf="hasVentasPorNumero(sorteo.name)">
+          <h5>
+            <i class="fas fa-th"></i>
+            Resumen de Ventas por Número
+          </h5>
+          
+          <!-- Números más vendidos (top 5) -->
+          <div class="top-numeros">
+            <h6>
+              <i class="fas fa-trophy"></i>
+              Top 5 Números Más Vendidos
+            </h6>
+            <div class="top-numeros-grid">
+              <div class="top-numero-card" *ngFor="let item of getNumerosMasVendidos(sorteo.name, 5); let i = index">
+                <div class="numero">{{ item.numero }}</div>
+                <div class="cantidad">L {{ item.total.toFixed(2) }}</div>
+                <div class="posicion">#{{ i + 1 }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tablero de números 00-99 -->
+          <div class="tablero-numeros">
+            <h6>
+              <i class="fas fa-grid-3x3"></i>
+              Tablero Completo (00-99)
+            </h6>
+            <div class="numeros-grid">
+              <div class="numero-cell" 
+                   *ngFor="let numero of getNumeros()"
+                   [class]="getIntensidadColor(sorteo.name, numero)"
+                   [title]="'Número ' + numero + ': L ' + getVentaTotalPorNumero(sorteo.name, numero).toFixed(2)">
+                <span class="numero-label">{{ numero }}</span>
+                <span class="numero-venta">L {{ getVentaTotalPorNumero(sorteo.name, numero).toFixed(2) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Estadísticas adicionales -->
+          <div class="estadisticas-adicionales">
+            <h6>
+              <i class="fas fa-chart-bar"></i>
+              Estadísticas de Ventas
+            </h6>
+            <div class="stats-adicionales-grid">
+              <div class="stat-adicional">
+                <div class="stat-icon">
+                  <i class="fas fa-hashtag"></i>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Números Diferentes Vendidos</span>
+                  <span class="stat-value">{{ getCantidadNumerosVendidos(sorteo.name) }}</span>
+                </div>
+              </div>
+              
+              <div class="stat-adicional">
+                <div class="stat-icon">
+                  <i class="fas fa-crown"></i>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Número Más Vendido</span>
+                  <span class="stat-value">
+                    {{ getNumerosMasVendidos(sorteo.name, 1).length > 0 ? getNumerosMasVendidos(sorteo.name, 1)[0].numero : 'N/A' }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="stat-adicional">
+                <div class="stat-icon">
+                  <i class="fas fa-calculator"></i>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Promedio por Número</span>
+                  <span class="stat-value">L {{ getPromedioVentaPorNumero(sorteo.name).toFixed(2) }}</span>
+                </div>
+              </div>
+
+              <div class="stat-adicional">
+                <div class="stat-icon">
+                  <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Venta Máxima</span>
+                  <span class="stat-value">L {{ getMaxVentaPorNumero(sorteo.name).toFixed(2) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

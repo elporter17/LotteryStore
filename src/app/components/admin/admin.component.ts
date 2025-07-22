@@ -4,7 +4,7 @@ import { SupabaseService } from '../../services/supabase.service';
 import { NotificationService } from '../../services/notification.service';
 import { PrintService } from '../../services/print.service';
 import { Router } from '@angular/router';
-import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES } from '../../models/interfaces';
+import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES, SucursalFactor } from '../../models/interfaces';
 
 @Component({
   selector: 'app-admin',
@@ -60,6 +60,17 @@ export class AdminComponent implements OnInit {
   showSorteosSection: boolean = false;
   showUsersSection: boolean = false;
 
+  // Propiedades para modal de factores por sucursal
+  showFactorsModal: boolean = false;
+  sucursalesFactores: SucursalFactor[] = [];
+  factoresPorSucursal: { [sucursal: string]: number } = {};
+  currentSorteoForFactors: { sorteo: SorteoSchedule, winningNumber: string } | null = null;
+
+  // Propiedades para resumen de cierre por sucursales
+  showResumenModal: boolean = false;
+  resumenSucursales: any[] = [];
+  currentSorteoForResumen: string = '';
+
   constructor(
     private supabaseService: SupabaseService,
     private notificationService: NotificationService,
@@ -76,6 +87,8 @@ export class AdminComponent implements OnInit {
     this.showSaleDetailModal = false;
     this.showUserModal = false;
     this.showPasswordModal = false;
+    this.showFactorsModal = false;
+    this.showResumenModal = false;
     
     // Recuperar filtros de localStorage o usar valores por defecto
     this.loadFilterState();
@@ -348,7 +361,6 @@ export class AdminComponent implements OnInit {
 
   async setWinningNumber(sorteo: SorteoSchedule): Promise<void> {
     const winningNumber = this.winningNumbers[sorteo.name];
-    const multiplicador = this.factorMultiplicador[sorteo.name] || 70;
     
     if (!winningNumber) {
       this.notificationService.showError('Por favor ingrese un número ganador');
@@ -362,75 +374,8 @@ export class AdminComponent implements OnInit {
       return;
     }
 
-    try {
-      this.isLoading = true;
-      
-      // Usar fecha de Honduras en lugar de new Date()
-      const hondurasToday = this.supabaseService.getHondurasDateTime();
-      
-      // Usar formato de fecha más estándar para evitar problemas con caracteres especiales
-      const fechaStr = hondurasToday.toISOString().split('T')[0]; // YYYY-MM-DD
-      const sorteoId = `${fechaStr}-${sorteo.name}`;
-      
-      
-      // Intentar actualizar con múltiples métodos de fallback
-      let success = false;
-      let lastError = null;
-      
-      // Asegurar formato de 2 dígitos para el número ganador
-      const formattedWinningNumber = winningNumber.toString().padStart(2, '0');
-      
-      // Estrategia: Intentar UPDATE primero (más común), luego INSERT si falla
-      try {
-        await this.supabaseService.updateSorteoWinnerDirect(sorteoId, formattedWinningNumber, multiplicador);
-        success = true;
-      } catch (updateError) {
-        
-        // Si el UPDATE falla, puede ser que el registro no exista, intentar INSERT
-        try {
-          await this.supabaseService.insertNewSorteo(sorteoId, formattedWinningNumber, multiplicador);
-          success = true;
-        } catch (insertError) {
-          lastError = insertError;
-          
-          // Último recurso: método simple
-          try {
-            await this.supabaseService.updateSorteoWinnerSimple(sorteoId, formattedWinningNumber, multiplicador);
-            success = true;
-          } catch (simpleError) {
-            lastError = simpleError;
-          }
-        }
-      }
-      
-      if (!success) {
-        throw lastError;
-      }
-      
-      
-      // Recalcular totales y actualizar base de datos
-      await this.calculateSorteoResults(sorteo, formattedWinningNumber, multiplicador);
-      
-      // Recargar datos de ventas y sorteos
-      await this.loadSales();
-      await this.loadSorteosData();
-      
-      // Actualizar la UI específicamente para este sorteo
-      await this.updateSorteoUI(sorteo.name, formattedWinningNumber, multiplicador);
-      
-      this.notificationService.showSuccess(`Número ganador ${formattedWinningNumber} establecido correctamente para ${sorteo.name}`);
-      
-    } catch (error) {
-      
-      // Mostrar el error específico para debugging
-      const errorMessage = (error as any)?.message || 'Error desconocido';
-      const errorCode = (error as any)?.code || 'Sin código';
-      
-      this.notificationService.showError(`Error al establecer el número ganador: ${errorMessage} (Código: ${errorCode})`);
-      
-    } finally {
-      this.isLoading = false;
-    }
+    // Abrir modal para configurar factores por sucursal
+    await this.openFactorsModal(sorteo, winningNumber);
   }
 
   private async calculateSorteoResults(sorteo: SorteoSchedule, winningNumber: string, multiplicador: number = 70): Promise<void> {
@@ -1237,6 +1182,156 @@ export class AdminComponent implements OnInit {
   // Navegar a la gestión de usuarios
   navigateToUsers(): void {
     this.router.navigate(['/admin/users']);
+  }
+
+  // ===== MÉTODOS PARA MODAL DE FACTORES POR SUCURSAL =====
+
+  async openFactorsModal(sorteoName: string, winningNumber: number): Promise<void>;
+  async openFactorsModal(sorteo: SorteoSchedule, winningNumber: string): Promise<void>;
+  async openFactorsModal(sorteoOrName: SorteoSchedule | string, winningNumber: string | number): Promise<void> {
+    try {
+      this.isLoading = true;
+      
+      // Cargar usuarios activos por sucursal
+      this.sucursalesFactores = await this.supabaseService.getActiveUsersBySucursal();
+      
+      // Inicializar factores con valores por defecto
+      this.factoresPorSucursal = {};
+      for (const sucursal of this.sucursalesFactores) {
+        this.factoresPorSucursal[sucursal.sucursal] = sucursal.factor;
+      }
+      
+      // Manejar ambos tipos de parámetros
+      if (typeof sorteoOrName === 'string') {
+        // Llamada desde la interfaz del sorteo (solo nombre y número)
+        const sorteoSchedule = SORTEO_SCHEDULES.find(s => s.name === sorteoOrName);
+        if (sorteoSchedule) {
+          this.currentSorteoForFactors = { 
+            sorteo: sorteoSchedule, 
+            winningNumber: winningNumber.toString() 
+          };
+        }
+      } else {
+        // Llamada desde setWinningNumber (objeto completo)
+        this.currentSorteoForFactors = { 
+          sorteo: sorteoOrName, 
+          winningNumber: winningNumber.toString() 
+        };
+      }
+      
+      this.showFactorsModal = true;
+      
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error);
+      this.notificationService.showError('Error al cargar configuración de sucursales');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  closeFactorsModal(): void {
+    this.showFactorsModal = false;
+    this.currentSorteoForFactors = null;
+    this.factoresPorSucursal = {};
+    this.sucursalesFactores = [];
+  }
+
+  closeResumenModal(): void {
+    this.showResumenModal = false;
+    this.resumenSucursales = [];
+    this.currentSorteoForResumen = '';
+  }
+
+  async confirmWinningNumberWithFactors(): Promise<void> {
+    if (!this.currentSorteoForFactors) {
+      this.notificationService.showError('No hay sorteo seleccionado');
+      return;
+    }
+
+    const { sorteo, winningNumber } = this.currentSorteoForFactors;
+
+    try {
+      this.isLoading = true;
+      
+      // Usar fecha de Honduras
+      const hondurasToday = this.supabaseService.getHondurasDateTime();
+      const fechaStr = hondurasToday.toISOString().split('T')[0];
+      const sorteoId = `${fechaStr}-${sorteo.name}`;
+      
+      // Crear sorteos por sucursal con factores específicos
+      await this.supabaseService.crearSorteosPorSucursal(
+        sorteoId,
+        winningNumber,
+        this.factoresPorSucursal
+      );
+      
+      // Calcular totales por sucursal
+      await this.supabaseService.calcularTotalesSorteoPorSucursal(sorteoId);
+      
+      // Cerrar modal de factores
+      this.closeFactorsModal();
+      
+      // Obtener resumen de sucursales para mostrar
+      this.resumenSucursales = await this.supabaseService.getSorteoResumenPorSucursal(sorteoId);
+      this.currentSorteoForResumen = `${sorteo.label} - Número Ganador: ${winningNumber.padStart(2, '0')}`;
+      
+      // Mostrar modal de resumen
+      this.showResumenModal = true;
+      
+      // Recargar datos
+      await this.loadSales();
+      await this.loadSorteosData();
+      
+      // Notificar actualización de resúmenes
+      this.supabaseService.notifyResumenUpdate();
+      
+      // Actualizar UI
+      this.winningNumbers[sorteo.name] = winningNumber;
+      
+      this.notificationService.showSuccess(
+        `Número ganador ${winningNumber.padStart(2, '0')} establecido con factores específicos por sucursal para ${sorteo.name}`
+      );
+      
+    } catch (error) {
+      console.error('Error al establecer número ganador:', error);
+      this.notificationService.showError('Error al establecer el número ganador con factores por sucursal');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Obtener lista única de sucursales
+  getUniqueSucursales(): string[] {
+    return [...new Set(this.sucursalesFactores.map(s => s.sucursal))];
+  }
+
+  // Actualizar factor para una sucursal específica
+  updateFactorForSucursal(sucursal: string, factor: string | number): void {
+    this.factoresPorSucursal[sucursal] = typeof factor === 'string' ? parseFloat(factor) : factor;
+  }
+
+  // Métodos auxiliares para el template
+  getUsersBySucursal(sucursal: string): SucursalFactor[] {
+    return this.sucursalesFactores.filter(s => s.sucursal === sucursal);
+  }
+
+  hasSucursalUsers(sucursal: string): boolean {
+    return this.sucursalesFactores.filter(s => s.sucursal === sucursal).length > 0;
+  }
+
+  // Métodos para calcular totales en el resumen
+  getTotalVendidoGeneral(): string {
+    const total = this.resumenSucursales.reduce((sum, s) => sum + (s.total_vendido || 0), 0);
+    return total.toFixed(2);
+  }
+
+  getTotalPagadoGeneral(): string {
+    const total = this.resumenSucursales.reduce((sum, s) => sum + (s.total_pagado || 0), 0);
+    return total.toFixed(2);
+  }
+
+  getGananciaTotalGeneral(): number {
+    return this.resumenSucursales.reduce((sum, s) => sum + (s.ganancia_neta || 0), 0);
   }
 
 }

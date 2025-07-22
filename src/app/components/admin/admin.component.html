@@ -179,19 +179,11 @@
                          [disabled]="isLoading"
                          placeholder="Ingrese número (1-99)">
                 </div>
-                <div class="form-group">
-                  <label>Factor Multiplicador:</label>
-                  <input type="number" class="form-input" min="1" max="100" step="0.1" 
-                         [(ngModel)]="factorMultiplicador[sorteo.name]" 
-                         [value]="factorMultiplicador[sorteo.name] || 70" 
-                         [disabled]="isLoading"
-                         placeholder="Factor (ej: 70)">
-                </div>
-                <button class="btn-set-winner" (click)="setWinningNumber(sorteo)" 
+                <button class="btn-set-winner" (click)="openFactorsModal(sorteo.name, +winningNumbers[sorteo.name])" 
                         [disabled]="!winningNumbers[sorteo.name] || isLoading">
-                  <i class="fas fa-trophy"></i> 
-                  <span *ngIf="isLoading">Guardando...</span>
-                  <span *ngIf="!isLoading">Establecer Ganador</span>
+                  <i class="fas fa-cog"></i> 
+                  <span *ngIf="isLoading">Cargando...</span>
+                  <span *ngIf="!isLoading">Configurar Factores</span>
                 </button>
               </div>
               
@@ -205,6 +197,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Componente de Resumen de Sorteos -->
+    <app-resumen-sorteos></app-resumen-sorteos>
 
     <!-- Sección de Ventas -->
     <div class="ventas-section">
@@ -473,6 +468,155 @@
           <i class="fas fa-times"></i> Cerrar
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para configurar factores por sucursal -->
+<div class="modal-overlay" *ngIf="showFactorsModal" (click)="closeFactorsModal()">
+  <div class="modal-container factors-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="fas fa-calculator"></i>
+        Configurar Factores por Sucursal
+      </h3>
+      <div class="sorteo-info" *ngIf="currentSorteoForFactors">
+        <div class="sorteo-badge">{{ currentSorteoForFactors.sorteo.label }}</div>
+        <div class="winning-number">Número Ganador: {{ currentSorteoForFactors.winningNumber.padStart(2, '0') }}</div>
+      </div>
+      <button class="btn-close" (click)="closeFactorsModal()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="factors-instruction">
+        <i class="fas fa-info-circle"></i>
+        <p>Configure el factor multiplicador para cada sucursal. Este factor determinará cuánto se paga por cada número ganador.</p>
+      </div>
+
+      <div class="factors-list" *ngIf="sucursalesFactores.length > 0">
+        <div class="factor-item" *ngFor="let sucursal of getUniqueSucursales(); let i = index">
+          <div class="sucursal-info">
+            <div class="sucursal-name">
+              <i class="fas fa-store"></i>
+              {{ sucursal }}
+            </div>
+            <div class="sucursal-users" *ngIf="hasSucursalUsers(sucursal)">
+              <small>
+                Usuarios: 
+                <span *ngFor="let user of getUsersBySucursal(sucursal); let last = last">
+                  {{ user.email }}{{ !last ? ', ' : '' }}
+                </span>
+              </small>
+            </div>
+          </div>
+          
+          <div class="factor-input">
+            <label>Factor (ej: 70)</label>
+            <div class="input-with-x">
+              <input 
+                type="number" 
+                min="1" 
+                max="999" 
+                step="0.1"
+                [value]="factoresPorSucursal[sucursal] || 75" 
+                (input)="updateFactorForSucursal(sucursal, $any($event.target).value)"
+                placeholder="70">
+              <span class="x-multiplier">x</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="loading-factors" *ngIf="isLoading && sucursalesFactores.length === 0">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Cargando configuración de sucursales...</p>
+      </div>
+
+      <div class="no-sucursales" *ngIf="!isLoading && sucursalesFactores.length === 0">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>No se encontraron sucursales activas</p>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-modal btn-secondary" (click)="closeFactorsModal()" [disabled]="isLoading">
+        <i class="fas fa-times"></i>
+        Cancelar
+      </button>
+      <button class="btn-modal btn-primary" (click)="confirmWinningNumberWithFactors()" [disabled]="isLoading">
+        <i class="fas fa-spinner fa-spin" *ngIf="isLoading"></i>
+        <i class="fas fa-trophy" *ngIf="!isLoading"></i>
+        {{ isLoading ? 'Estableciendo...' : 'Establecer Ganador' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para mostrar resumen por sucursales -->
+<div class="modal-overlay" *ngIf="showResumenModal" (click)="closeResumenModal()">
+  <div class="modal-container resumen-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="fas fa-chart-bar"></i>
+        Resumen de Cierre por Sucursales
+      </h3>
+      <button type="button" class="btn-close" (click)="closeResumenModal()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="sorteo-info">
+        <h4>{{ currentSorteoForResumen }}</h4>
+      </div>
+      
+      <div class="resumen-table">
+        <div class="table-header">
+          <div class="col-sucursal">Sucursal</div>
+          <div class="col-factor">Factor</div>
+          <div class="col-vendido">Total Vendido</div>
+          <div class="col-pagado">Total Pagado</div>
+          <div class="col-ganancia">Ganancia Neta</div>
+        </div>
+        
+        <div class="table-row" *ngFor="let sucursal of resumenSucursales">
+          <div class="col-sucursal">{{ sucursal.sucursal }}</div>
+          <div class="col-factor">{{ sucursal.factor_multiplicador }}x</div>
+          <div class="col-vendido">L {{ sucursal.total_vendido?.toFixed(2) || '0.00' }}</div>
+          <div class="col-pagado">L {{ sucursal.total_pagado?.toFixed(2) || '0.00' }}</div>
+          <div class="col-ganancia" 
+               [class.positive]="(sucursal.ganancia_neta || 0) > 0"
+               [class.negative]="(sucursal.ganancia_neta || 0) < 0">
+            L {{ sucursal.ganancia_neta?.toFixed(2) || '0.00' }}
+          </div>
+        </div>
+        
+        <!-- Totales generales -->
+        <div class="table-footer">
+          <div class="col-sucursal"><strong>TOTAL GENERAL</strong></div>
+          <div class="col-factor">-</div>
+          <div class="col-vendido">
+            <strong>L {{ getTotalVendidoGeneral() }}</strong>
+          </div>
+          <div class="col-pagado">
+            <strong>L {{ getTotalPagadoGeneral() }}</strong>
+          </div>
+          <div class="col-ganancia"
+               [class.positive]="getGananciaTotalGeneral() > 0"
+               [class.negative]="getGananciaTotalGeneral() < 0">
+            <strong>L {{ getGananciaTotalGeneral().toFixed(2) }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button class="btn-modal btn-primary" (click)="closeResumenModal()">
+        <i class="fas fa-check"></i>
+        Entendido
+      </button>
     </div>
   </div>
 </div>
