@@ -42,10 +42,40 @@
         </div>
       </div>
       
-      <!-- Mensaje de bloqueo -->
-      <div *ngIf="isBlocked" class="alert alert-danger">
-        <i class="fas fa-lock"></i> 
-        <strong>Venta bloqueada:</strong> Faltan menos de 5 minutos para el cierre del sorteo.
+      <!-- Mensaje de bloqueo mejorado -->
+      <div *ngIf="isBlocked" class="alert alert-danger block-info">
+        <div class="block-header">
+          <i class="fas fa-lock"></i> 
+          <strong>{{ blockMessage }}</strong>
+        </div>
+        
+        <div class="block-details" *ngIf="blockDetail">
+          <p>{{ blockDetail }}</p>
+        </div>
+        
+        <!-- Información detallada del próximo sorteo (solo cuando no hay sorteo activo) -->
+        <div *ngIf="nextSorteoName && nextSorteoOpenTime" class="next-sorteo-info">
+          <div class="next-sorteo-card">
+            <div class="sorteo-name">
+              <i class="fas fa-clock"></i>
+              <span>{{ nextSorteoName }}</span>
+            </div>
+            <div class="opening-time">
+              <span class="label">Abre a las:</span>
+              <span class="time">{{ nextSorteoOpenTime }}</span>
+            </div>
+            <div class="countdown" *ngIf="timeUntilNextOpening">
+              <span class="label">Tiempo restante:</span>
+              <span class="time-remaining">{{ timeUntilNextOpening }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Mensaje para bloqueo por cierre (últimos 5 minutos) -->
+        <div *ngIf="!nextSorteoName && blockDetail.includes('minutos')" class="closing-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span>El sorteo cerrará pronto</span>
+        </div>
       </div>
     </div>
 
@@ -74,6 +104,14 @@
         </div>
       </div>
       
+      <!-- Total a Pagar -->
+      <div class="total-container">
+        <div class="total-card">
+          <div class="total-label">Total a Pagar:</div>
+          <div class="total-amount">L {{ getTotal().toFixed(2) }}</div>
+        </div>
+      </div>
+      
       <!-- Botón Agregar más números -->
       <div class="add-more-container">
         <button class="btn-add-more" 
@@ -95,33 +133,117 @@
 
   </div>
 
-  <!-- Ventas Actuales (siempre visible en la parte inferior) -->
-  <div class="ventas-actuales" *ngIf="recentSales.length > 0">
-    <div class="ventas-header">
-      <h4>Ventas actuales</h4>
+  <!-- TABS DE SORTEOS -->
+  <div class="sorteos-tabs-section">
+    <div class="tabs-header">
+      <button class="tab-btn" 
+              [class.active]="activeTab === 'manana'"
+              (click)="setActiveTab('manana')">
+        <i class="fas fa-sun"></i> Mañana
+      </button>
+      <button class="tab-btn" 
+              [class.active]="activeTab === 'tarde'"
+              (click)="setActiveTab('tarde')">
+        <i class="fas fa-cloud-sun"></i> Tarde
+      </button>
+      <button class="tab-btn" 
+              [class.active]="activeTab === 'noche'"
+              (click)="setActiveTab('noche')">
+        <i class="fas fa-moon"></i> Noche
+      </button>
     </div>
-    
-    <div class="ventas-body">
-      <div class="transacciones-header">
-        Transacciones
-      </div>
-      
-      <div *ngFor="let sale of getFilteredSales(); trackBy: trackBySaleId" class="transaccion-item">
-        <div class="transaccion-left">
-          <div class="fecha-hora">{{ formatTime(sale.createdAt) }}</div>
-          <div class="numero-recibo">Recibo: {{ sale.numeroRecibo || sale.id.slice(-6) }}</div>
-          <div class="correlativo">Correlativo: {{ sale.correlativo || 'N/A' }}</div>
-          <div class="numeros-jugados">
-            <span *ngFor="let detail of getSaleDetails(sale.id); trackBy: trackByDetailId" class="numero-small">
-              {{ detail.numero.toString().padStart(2, '0') }} x L{{ detail.monto.toFixed(0) }}
-            </span>
+
+    <div class="tab-content">
+      <!-- Tab Mañana -->
+      <div *ngIf="activeTab === 'manana'" class="tab-panel">
+        <div class="sorteo-summary">
+          <div class="summary-card">
+            <div class="summary-label">Total Vendido</div>
+            <div class="summary-value">L {{ getSorteoTotalVendido('manana').toFixed(2) }}</div>
+          </div>
+          <div class="summary-card" *ngIf="getSorteoNumeroGanador('manana') !== null">
+            <div class="summary-label">Número Ganador</div>
+            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('manana')!.toString().padStart(2, '0') }}</div>
+          </div>
+          <div class="summary-card" *ngIf="getSorteoTotalPagar('manana') > 0">
+            <div class="summary-label">Total a Pagar</div>
+            <div class="summary-value payout">L {{ getSorteoTotalPagar('manana').toFixed(2) }}</div>
           </div>
         </div>
-        <div class="transaccion-right">
-          <div class="total">Total: L{{ sale.total.toFixed(0) }}</div>
-          <button class="btn-reimprimir" (click)="reprintReceipt(sale)">
-            🖨️ Reimprimir
-          </button>
+        
+        <div class="numeros-vendidos">
+          <h5>Números Vendidos</h5>
+          <div *ngIf="getSorteoNumerosVendidos('manana').length > 0" class="numeros-grid">
+            <div *ngFor="let numero of getSorteoNumerosVendidos('manana')" class="numero-vendido-item">
+              <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
+              <span class="monto">L {{ numero.total.toFixed(0) }}</span>
+            </div>
+          </div>
+          <div *ngIf="getSorteoNumerosVendidos('manana').length === 0" class="no-data">
+            <p>No hay números vendidos para este sorteo</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Tarde -->
+      <div *ngIf="activeTab === 'tarde'" class="tab-panel">
+        <div class="sorteo-summary">
+          <div class="summary-card">
+            <div class="summary-label">Total Vendido</div>
+            <div class="summary-value">L {{ getSorteoTotalVendido('tarde').toFixed(2) }}</div>
+          </div>
+          <div class="summary-card" *ngIf="getSorteoNumeroGanador('tarde') !== null">
+            <div class="summary-label">Número Ganador</div>
+            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('tarde')!.toString().padStart(2, '0') }}</div>
+          </div>
+          <div class="summary-card" *ngIf="getSorteoTotalPagar('tarde') > 0">
+            <div class="summary-label">Total a Pagar</div>
+            <div class="summary-value payout">L {{ getSorteoTotalPagar('tarde').toFixed(2) }}</div>
+          </div>
+        </div>
+        
+        <div class="numeros-vendidos">
+          <h5>Números Vendidos</h5>
+          <div *ngIf="getSorteoNumerosVendidos('tarde').length > 0" class="numeros-grid">
+            <div *ngFor="let numero of getSorteoNumerosVendidos('tarde')" class="numero-vendido-item">
+              <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
+              <span class="monto">L {{ numero.total.toFixed(0) }}</span>
+            </div>
+          </div>
+          <div *ngIf="getSorteoNumerosVendidos('tarde').length === 0" class="no-data">
+            <p>No hay números vendidos para este sorteo</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Noche -->
+      <div *ngIf="activeTab === 'noche'" class="tab-panel">
+        <div class="sorteo-summary">
+          <div class="summary-card">
+            <div class="summary-label">Total Vendido</div>
+            <div class="summary-value">L {{ getSorteoTotalVendido('noche').toFixed(2) }}</div>
+          </div>
+          <div class="summary-card" *ngIf="getSorteoNumeroGanador('noche') !== null">
+            <div class="summary-label">Número Ganador</div>
+            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('noche')!.toString().padStart(2, '0') }}</div>
+          </div>
+          <div class="summary-card" *ngIf="getSorteoTotalPagar('noche') > 0">
+            <div class="summary-label">Total a Pagar</div>
+            <div class="summary-value payout">L {{ getSorteoTotalPagar('noche').toFixed(2) }}</div>
+          </div>
+        </div>
+        
+        <div class="numeros-vendidos">
+          <h5>Números Vendidos</h5>
+          <div *ngIf="getSorteoNumerosVendidos('noche').length > 0" class="numeros-grid">
+            <div *ngFor="let numero of getSorteoNumerosVendidos('noche')" class="numero-vendido-item">
+              <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
+              <span class="monto">L {{ numero.total.toFixed(0) }}</span>
+            </div>
+          </div>
+          <div *ngIf="getSorteoNumerosVendidos('noche').length === 0" class="no-data">
+            <p>No hay números vendidos para este sorteo</p>
+          </div>
         </div>
       </div>
     </div>
@@ -198,40 +320,52 @@
         </button>
       </div>
       <div class="modal-body">
-        <div class="calculator-container">
-          <!-- Display de la apuesta -->
-          <div class="calculator-display">
-            <span class="display-label">APUESTA</span>
-            <div class="display-value">{{ modalAmountInput || '00' }}</div>
+        <div class="stepper-container">
+          
+          <!-- Control Stepper -->
+          <div class="stepper-controls">
+            <button type="button" 
+                    class="stepper-btn stepper-minus" 
+                    (click)="decreaseAmount(); $event.stopPropagation()"
+                    [disabled]="stepperAmount <= 5">
+              <i class="fas fa-minus"></i>
+            </button>
+            
+            <div class="stepper-value">
+              <span class="amount-large">{{ stepperAmount }}</span>
+              <span class="currency">Lempiras</span>
+            </div>
+            
+            <button type="button" 
+                    class="stepper-btn stepper-plus" 
+                    (click)="increaseAmount(); $event.stopPropagation()"
+                    [disabled]="stepperAmount >= maxAmount">
+              <i class="fas fa-plus"></i>
+            </button>
           </div>
           
-          <!-- Teclado numérico -->
-          <div class="calculator-keypad">
-            <div class="keypad-row">
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(1); $event.stopPropagation()">1</button>
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(2); $event.stopPropagation()">2</button>
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(3); $event.stopPropagation()">3</button>
-            </div>
-            <div class="keypad-row">
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(4); $event.stopPropagation()">4</button>
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(5); $event.stopPropagation()">5</button>
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(6); $event.stopPropagation()">6</button>
-            </div>
-            <div class="keypad-row">
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(7); $event.stopPropagation()">7</button>
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(8); $event.stopPropagation()">8</button>
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(9); $event.stopPropagation()">9</button>
-            </div>
-            <div class="keypad-row">
-              <button type="button" class="keypad-btn" (click)="pressModalAmount(0); $event.stopPropagation()">0</button>
-              <button type="button" class="keypad-btn keypad-clear" (click)="clearModalAmount(); $event.stopPropagation()">
-                C
-              </button>
-              <button type="button" class="keypad-btn keypad-accept" (click)="acceptModalAmount(); $event.stopPropagation()" 
-                      [disabled]="!modalAmountInput">
-                Aceptar
-              </button>
-            </div>
+          <!-- Botones de acción -->
+          <div class="stepper-actions">
+            <button type="button" 
+                    class="btn btn-outline-secondary btn-lg stepper-action-btn" 
+                    (click)="resetAmount(); $event.stopPropagation()">
+              <i class="fas fa-redo"></i> Reiniciar
+            </button>
+            
+            <button type="button" 
+                    class="btn btn-success btn-lg stepper-action-btn" 
+                    (click)="acceptStepperAmount(); $event.stopPropagation()"
+                    [disabled]="stepperAmount < 5">
+              <i class="fas fa-check"></i> Aceptar
+            </button>
+          </div>
+          
+          <!-- Información adicional -->
+          <div class="stepper-info">
+            <small class="text-muted">
+              <i class="fas fa-info-circle"></i> 
+              Monto mínimo: L 5 • Se incrementa de 5 en 5
+            </small>
           </div>
         </div>
       </div>

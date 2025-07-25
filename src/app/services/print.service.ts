@@ -35,10 +35,7 @@ export class PrintService {
       const lineHeight = 5;
 
       // Título
-      pdf.setFontSize(14);
-      pdf.text('LOTERIA', 40, y, { align: 'center' });
-      y += lineHeight;
-
+    
       pdf.setFontSize(10);
       pdf.text('RECIBO DE VENTA', 40, y, { align: 'center' });
       y += lineHeight + 2;
@@ -172,7 +169,7 @@ export class PrintService {
       id: 'test-123',
       userId: 'user1',
       sucursal: 'Sucursal 1',
-      sorteo: 'mañana',
+      sorteo: 'manana',
       fecha: new Date(),
       total: 50,
       numeroRecibo: 'SUC-REC-250717-0001',

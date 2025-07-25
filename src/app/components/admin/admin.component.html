@@ -74,6 +74,24 @@
         {{ isLoadingFilters ? 'Limpiando...' : 'Limpiar' }}
       </button>
     </div>
+
+    <!-- Botones de Exportación -->
+    <div class="export-actions">
+      <div class="export-label">
+        <i class="fas fa-download"></i>
+        Descargar Reporte Diario:
+      </div>
+      <button class="btn-export btn-excel" (click)="downloadDailyReportExcel()" [disabled]="isLoading">
+        <i class="fas fa-spinner fa-spin" *ngIf="isLoading; else excelIcon"></i>
+        <ng-template #excelIcon><i class="fas fa-file-excel"></i></ng-template>
+        Excel
+      </button>
+      <button class="btn-export btn-pdf" (click)="downloadDailyReportPDF()" [disabled]="isLoading">
+        <i class="fas fa-spinner fa-spin" *ngIf="isLoading; else pdfIcon"></i>
+        <ng-template #pdfIcon><i class="fas fa-file-pdf"></i></ng-template>
+        PDF
+      </button>
+    </div>
   </div>
 
   <!-- Contenido Principal -->
@@ -122,6 +140,116 @@
       </div>
     </div>
 
+    <!-- Sección de Información del Número Ganador -->
+    <div class="numero-ganador-section" *ngIf="resumenSucursales && resumenSucursales.length > 0">
+      <div class="section-header">
+        <h3><i class="fas fa-trophy"></i> Información del Número Ganador</h3>
+        <div class="section-subtitle">Detalle de pagos por sucursal</div>
+      </div>
+      
+      <div class="numero-ganador-card">
+        <div class="numero-ganador-header">
+          <div class="numero-display">
+            <span class="numero-text">{{ resumenSucursales[0]?.numero_ganador || '00' }}</span>
+            <span class="numero-label">Número Ganador</span>
+          </div>
+          <div class="totales-general">
+            <div class="total-item">
+              <span class="total-value">L {{ getTotalCantidadNumeroGanador().toFixed(2) }}</span>
+              <span class="total-label">Total Comprado</span>
+            </div>
+            <div class="total-item">
+              <span class="total-value">L {{ getTotalPagadoGeneral() }}</span>
+              <span class="total-label">Total a Pagar</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="sucursales-detalle">
+          <div class="detalle-header">
+            <span>Sucursal</span>
+            <span>Factor</span>
+            <span>Cantidad</span>
+            <span>Pago</span>
+          </div>
+          <div class="detalle-row" *ngFor="let sucursal of resumenSucursales">
+            <span class="sucursal-name">{{ sucursal.sucursal }}</span>
+            <span class="factor-value">{{ sucursal.factor_multiplicador }}x</span>
+            <span class="cantidad-value">L {{ (sucursal.cantidad_numero_ganador || 0).toFixed(2) }}</span>
+            <span class="pago-value">L {{ ((sucursal.cantidad_numero_ganador || 0) * (sucursal.factor_multiplicador || 1)).toFixed(2) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección de Números Vendidos por Sorteo -->
+    <div class="numeros-vendidos-section">
+      <div class="section-header">
+        <h3><i class="fas fa-chart-bar"></i> Números Vendidos por Sorteo</h3>
+        <div class="section-subtitle">Vista en tiempo real de las ventas por sorteo</div>
+      </div>
+      
+      <div class="sorteos-numeros-grid" *ngIf="sales.length > 0; else noVentasNumeros">
+        <div *ngFor="let sorteoGroup of getNumbersSummaryBySorteoAndSucursal()" class="sorteo-numeros-card">
+          <div class="sorteo-numeros-header">
+            <h4>{{ sorteoGroup.sorteo }}</h4>
+            <div class="sorteo-total">
+              Total: L {{ getSorteoTotal(sorteoGroup).toFixed(2) }}
+            </div>
+          </div>
+          
+          <div class="sucursales-container">
+            <div *ngFor="let sucursalGroup of sorteoGroup.sucursales" class="sucursal-group">
+              <div class="sucursal-header">
+                <h5>{{ sucursalGroup.sucursal }}</h5>
+                <span class="sucursal-total">L {{ getSucursalTotal(sucursalGroup).toFixed(2) }}</span>
+              </div>
+              
+              <!-- Top 5 números más vendidos -->
+              <div class="top-numeros-section">
+                <h6>
+                  <i class="fas fa-trophy"></i>
+                  Top 5 Números Más Vendidos
+                </h6>
+                <div class="top-numeros-grid">
+                  <div class="top-numero-card" *ngFor="let numero of sucursalGroup.numeros.slice(0, 5); let i = index">
+                    <div class="numero">{{ numero.numero.toString().padStart(2, '0') }}</div>
+                    <div class="cantidad">L {{ numero.totalVendido.toFixed(2) }}</div>
+                    <div class="posicion">#{{ i + 1 }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tablero completo de números 00-99 -->
+              <div class="tablero-numeros">
+                <h6>
+                  <i class="fas fa-grid-3x3"></i>
+                  Tablero Completo (00-99)
+                </h6>
+                <div class="numeros-grid-completo">
+                  <div class="numero-cell" 
+                       *ngFor="let num of getAllNumbers()"
+                       [class]="getNumeroIntensity(sucursalGroup, num)"
+                       [title]="'Número ' + num.toString().padStart(2, '0') + ': L ' + getNumeroVenta(sucursalGroup, num).toFixed(2)">
+                    <span class="numero-label">{{ num.toString().padStart(2, '0') }}</span>
+                    <span class="numero-venta">L {{ getNumeroVenta(sucursalGroup, num).toFixed(2) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <ng-template #noVentasNumeros>
+        <div class="no-data-message">
+          <i class="fas fa-chart-bar"></i>
+          <h4>No hay ventas por números para mostrar</h4>
+          <p>Las estadísticas aparecerán cuando haya ventas registradas</p>
+        </div>
+      </ng-template>
+    </div>
+
     <!-- Sección de Sorteos con estilo minimalista -->
     <div class="sorteos-section">
       <div class="section-header">
@@ -151,22 +279,7 @@
                 </div>
                 <div class="factor">Factor: {{ getSorteoData(sorteo)?.factorMultiplicador || 70 }}</div>
               </div>
-              
-              <div class="sorteo-stats">
-                <div class="stat-item vendido">
-                  <span class="label">Vendido</span>
-                  <span class="value">L {{ getSorteoData(sorteo)?.totalVendido?.toFixed(2) || '0.00' }}</span>
-                </div>
-                <div class="stat-item pagado">
-                  <span class="label">Pagado</span>
-                  <span class="value">L {{ getSorteoData(sorteo)?.totalPagado?.toFixed(2) || '0.00' }}</span>
-                </div>
-                <div class="stat-item ganancia" [class.positive]="(getSorteoData(sorteo)?.gananciaNeta || 0) > 0" 
-                     [class.negative]="(getSorteoData(sorteo)?.gananciaNeta || 0) < 0">
-                  <span class="label">Ganancia</span>
-                  <span class="value">L {{ getSorteoData(sorteo)?.gananciaNeta?.toFixed(2) || '0.00' }}</span>
-                </div>
-              </div>
+            
             </div>
             
             <ng-template #setWinner>
@@ -200,70 +313,6 @@
 
     <!-- Componente de Resumen de Sorteos -->
     <app-resumen-sorteos></app-resumen-sorteos>
-
-    <!-- Sección de Ventas -->
-    <div class="ventas-section">
-      <div class="section-header">
-        <h3><i class="fas fa-list"></i> Historial de Ventas</h3>
-        <div class="section-actions">
-          <button class="btn-filter btn-primary" (click)="exportarVentasExcel()" [disabled]="isLoading" title="Exportar a Excel">
-            <i class="fas fa-file-excel"></i> Excel
-          </button>
-          <button class="btn-filter btn-primary" (click)="exportarVentasPDF()" [disabled]="isLoading" title="Exportar a PDF">
-            <i class="fas fa-file-pdf"></i> PDF
-          </button>
-        </div>
-      </div>
-      
-      <div class="ventas-table-container" *ngIf="sales.length > 0; else noSales">
-        <!-- Loading overlay para filtros -->
-        <div class="loading-overlay" *ngIf="isLoadingFilters">
-          <div class="loading-content">
-            <i class="fas fa-spinner fa-spin"></i>
-            <span>Aplicando filtros...</span>
-          </div>
-        </div>
-        
-        <div class="ventas-table" [class.loading]="isLoadingFilters">
-          <div class="table-header">
-            <div class="col-fecha">Fecha</div>
-            <div class="col-sucursal">Sucursal</div>
-            <div class="col-sorteo">Sorteo</div>
-            <div class="col-total">Total</div>
-            <div class="col-recibo">Recibo</div>
-            <div class="col-acciones">Acciones</div>
-          </div>
-          
-          <div class="table-body">
-            <div *ngFor="let sale of sales; trackBy: trackBySale" class="table-row">
-              <div class="col-fecha">{{ formatDateTime(sale.createdAt) }}</div>
-              <div class="col-sucursal">{{ sale.sucursal }}</div>
-              <div class="col-sorteo">{{ sale.sorteo }}</div>
-              <div class="col-total">L {{ sale.total.toFixed(2) }}</div>
-              <div class="col-recibo">{{ sale.numeroRecibo || sale.id.slice(-6) }}</div>
-              <div class="col-acciones">
-                <button class="btn-table-action" (click)="verDetalles(sale)" title="Ver detalles"
-                        [disabled]="isLoadingFilters">
-                  <i class="fas fa-eye"></i>
-                </button>
-                <button class="btn-table-action" (click)="reprintReceipt(sale)" title="Reimprimir"
-                        [disabled]="isLoadingFilters">
-                  <i class="fas fa-print"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <ng-template #noSales>
-        <div class="no-data-message">
-          <i class="fas fa-inbox"></i>
-          <h4>No hay ventas para mostrar</h4>
-          <p>Ajusta los filtros para ver diferentes resultados</p>
-        </div>
-      </ng-template>
-    </div>
 
   </div>
 </div>
@@ -576,6 +625,7 @@
         <div class="table-header">
           <div class="col-sucursal">Sucursal</div>
           <div class="col-factor">Factor</div>
+          <div class="col-numero-ganador">Cantidad #{{ resumenSucursales[0]?.numero_ganador || '00' }}</div>
           <div class="col-vendido">Total Vendido</div>
           <div class="col-pagado">Total Pagado</div>
           <div class="col-ganancia">Ganancia Neta</div>
@@ -584,6 +634,10 @@
         <div class="table-row" *ngFor="let sucursal of resumenSucursales">
           <div class="col-sucursal">{{ sucursal.sucursal }}</div>
           <div class="col-factor">{{ sucursal.factor_multiplicador }}x</div>
+          <div class="col-numero-ganador">
+            <span class="cantidad-numero">L {{ (sucursal.cantidad_numero_ganador || 0).toFixed(2) }}</span>
+            <small class="multiplicacion">x{{ sucursal.factor_multiplicador }} = L {{ ((sucursal.cantidad_numero_ganador || 0) * (sucursal.factor_multiplicador || 1)).toFixed(2) }}</small>
+          </div>
           <div class="col-vendido">L {{ sucursal.total_vendido?.toFixed(2) || '0.00' }}</div>
           <div class="col-pagado">L {{ sucursal.total_pagado?.toFixed(2) || '0.00' }}</div>
           <div class="col-ganancia" 
@@ -597,6 +651,9 @@
         <div class="table-footer">
           <div class="col-sucursal"><strong>TOTAL GENERAL</strong></div>
           <div class="col-factor">-</div>
+          <div class="col-numero-ganador">
+            <strong>L {{ getTotalCantidadNumeroGanador().toFixed(2) }}</strong>
+          </div>
           <div class="col-vendido">
             <strong>L {{ getTotalVendidoGeneral() }}</strong>
           </div>

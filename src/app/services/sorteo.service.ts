@@ -7,8 +7,8 @@ import { SupabaseService } from './supabase.service';
 })
 export class SorteoService {
   private sorteoSchedules: SorteoSchedule[] = [...SORTEO_SCHEDULES];
-  
-  constructor(private supabaseService: SupabaseService) { 
+
+  constructor(private supabaseService: SupabaseService) {
     this.loadSorteoSchedules();
   }
 
@@ -16,7 +16,7 @@ export class SorteoService {
     try {
       // Usar siempre los horarios definidos en las interfaces
       this.sorteoSchedules = [...SORTEO_SCHEDULES];
-      
+
       // Opcionalmente, si quieres usar horarios dinámicos de la BD, descomenta:
       /*
       const dynamicSchedules = await this.supabaseService.getSorteoSchedules();
@@ -44,16 +44,16 @@ export class SorteoService {
     const currentHour = hondurasTime.getHours();
     const currentMinute = hondurasTime.getMinutes();
     const currentTimeInMinutes = currentHour * 60 + currentMinute;
-    
+
     for (const sorteo of this.sorteoSchedules) {
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
-      
+
       if (currentTimeInMinutes < closeTimeInMinutes) {
         return sorteo;
       }
     }
-    
+
     // Si ya pasaron todos los sorteos del día, retorna null
     return null;
   }
@@ -63,49 +63,60 @@ export class SorteoService {
     const currentHour = hondurasTime.getHours();
     const currentMinute = hondurasTime.getMinutes();
     const currentTimeInMinutes = currentHour * 60 + currentMinute;
-    
+
     for (const sorteo of this.sorteoSchedules) {
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
-      
+
       if (currentTimeInMinutes < closeTimeInMinutes) {
         return sorteo;
       }
     }
-    
+
     // Si ya pasaron todos los sorteos del día, retorna el primero del siguiente día
     return this.sorteoSchedules[0] || null;
   }
 
   isSorteoOpen(sorteo: SorteoSchedule): boolean {
-    const hondurasTime = this.supabaseService.getHondurasDateTime();
-    const currentHour = hondurasTime.getHours();
-    const currentMinute = hondurasTime.getMinutes();
-    const currentTimeInMinutes = currentHour * 60 + currentMinute;
-    
-    const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
-    const closeTimeInMinutes = closeHour * 60 + closeMinute;
-    
-    return currentTimeInMinutes < closeTimeInMinutes;
+    // Hora actual en Honduras formateada
+    const hnFormatted = this.supabaseService.formatLocalDateForSupabase(
+      this.supabaseService.getHondurasDateTime()
+    );
+    const [, timePart] = hnFormatted.split(' ');
+    const [hourStr, minuteStr] = timePart.split(':');
+    const currentTotalMinutes = parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10);
+
+    // Hora de cierre del sorteo
+    const [closeHourStr, closeMinuteStr] = sorteo.closeTime.split(':');
+    const closeTotalMinutes =
+      parseInt(closeHourStr, 10) * 60 + parseInt(closeMinuteStr, 10);
+
+    return currentTotalMinutes < closeTotalMinutes;
   }
 
   getTimeUntilClose(sorteo: SorteoSchedule): string {
-    const hondurasTime = this.supabaseService.getHondurasDateTime();
-    const [hours, minutes] = sorteo.closeTime.split(':');
-    const closeTime = new Date(hondurasTime);
-    closeTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
-    if (closeTime <= hondurasTime) {
+    // Hora actual en Honduras formateada
+    const hnFormatted = this.supabaseService.formatLocalDateForSupabase(
+      this.supabaseService.getHondurasDateTime()
+    );
+    const [, timePart] = hnFormatted.split(' ');
+    const [hourStr, minuteStr] = timePart.split(':');
+    const currentTotalMinutes = parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10);
+
+    // Hora de cierre del sorteo
+    const [closeHourStr, closeMinuteStr] = sorteo.closeTime.split(':');
+    const closeTotalMinutes =
+      parseInt(closeHourStr, 10) * 60 + parseInt(closeMinuteStr, 10);
+
+    let diff = closeTotalMinutes - currentTotalMinutes;
+    if (diff <= 0) {
       return '00:00';
     }
-    
-    const diff = closeTime.getTime() - hondurasTime.getTime();
-    const hoursLeft = Math.floor(diff / (1000 * 60 * 60));
-    const minutesLeft = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    const timeLeft = `${hoursLeft.toString().padStart(2, '0')}:${minutesLeft.toString().padStart(2, '0')}`;
-    
-    return timeLeft;
+    const hoursLeft = Math.floor(diff / 60);
+    const minutesLeft = diff % 60;
+    return `${hoursLeft.toString().padStart(2, '0')}:${minutesLeft
+      .toString()
+      .padStart(2, '0')}`;
   }
 
   getAllSorteos(): SorteoSchedule[] {

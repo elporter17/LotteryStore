@@ -3,6 +3,7 @@ import { startOfDay, endOfDay } from 'date-fns';
 import { SupabaseService } from '../../services/supabase.service';
 import { NotificationService } from '../../services/notification.service';
 import { PrintService } from '../../services/print.service';
+import { ExportService, ReportData } from '../../services/export.service';
 import { Router } from '@angular/router';
 import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES, SucursalFactor } from '../../models/interfaces';
 
@@ -66,6 +67,12 @@ export class AdminComponent implements OnInit {
   factoresPorSucursal: { [sucursal: string]: number } = {};
   currentSorteoForFactors: { sorteo: SorteoSchedule, winningNumber: string } | null = null;
 
+  // Propiedades optimizadas para caché de datos
+  private cachedDashboardData: any = null;
+  private cachedNumbersData: any = null;
+  private lastDataFetch: Date | null = null;
+  private cacheValidTime = 30000; // 30 segundos de caché
+
   // Propiedades para resumen de cierre por sucursales
   showResumenModal: boolean = false;
   resumenSucursales: any[] = [];
@@ -75,12 +82,13 @@ export class AdminComponent implements OnInit {
     private supabaseService: SupabaseService,
     private notificationService: NotificationService,
     public printService: PrintService,
+    private exportService: ExportService,
     private router: Router,
     private cdr: ChangeDetectorRef
   ) {
-    // Inicializar fechas usando date-fns para filtros
+    // Inicializar fechas usando timezone de Honduras para filtros
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    this.selectedDate = hondurasToday.toISOString().split('T')[0];
+    this.selectedDate = this.supabaseService.formatDateTimeLocalHonduras(hondurasToday).split('T')[0];
     
     
     // FORZAR CIERRE DE TODOS LOS MODALES AL INICIALIZAR
@@ -93,13 +101,13 @@ export class AdminComponent implements OnInit {
     // Recuperar filtros de localStorage o usar valores por defecto
     this.loadFilterState();
     
-    // Si no hay filtros guardados, usar date-fns para inicializar
+    // Si no hay filtros guardados, usar fecha de Honduras para inicializar
     if (!this.fechaDesde || !this.fechaHasta) {
-      const fechaInicio = startOfDay(hondurasToday);
-      const fechaFin = endOfDay(hondurasToday);
+      const fechaInicio = this.supabaseService.getStartOfDayHonduras(hondurasToday);
+      const fechaFin = this.supabaseService.getEndOfDayHonduras(hondurasToday);
       
-      this.fechaDesde = this.formatDateTimeLocal(fechaInicio);
-      this.fechaHasta = this.formatDateTimeLocal(fechaFin);
+      this.fechaDesde = this.supabaseService.formatDateTimeLocalHonduras(fechaInicio);
+      this.fechaHasta = this.supabaseService.formatDateTimeLocalHonduras(fechaFin);
     }
     
   }
@@ -198,7 +206,7 @@ export class AdminComponent implements OnInit {
 
   getSorteoData(sorteo: SorteoSchedule): Sorteo | undefined {
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    const todayString = hondurasToday.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    const todayString = this.supabaseService.formatDateOnlyForSupabase(hondurasToday);
     const sorteoId = `${todayString}-${sorteo.name}`;
     
     
@@ -288,7 +296,7 @@ export class AdminComponent implements OnInit {
   async refreshTodaysSorteos(): Promise<void> {
     try {
       const hondurasToday = this.supabaseService.getHondurasDateTime();
-      const todayString = hondurasToday.toISOString().split('T')[0];
+      const todayString = this.supabaseService.formatDateOnlyForSupabase(hondurasToday);
       
       for (const sorteo of this.sorteoSchedules) {
         const sorteoId = `${todayString}-${sorteo.name}`;
@@ -305,10 +313,13 @@ export class AdminComponent implements OnInit {
       if (!this.isLoadingFilters) {
         this.isLoading = true;
       }
+
+      // Limpiar caché cuando se cargan nuevos datos
+      this.clearCache();
       
-      // Si hay filtros de rango de fechas, usar el método de rango
+      // Si hay filtros de rango de fechas, usar el método de rango optimizado
       if (this.fechaDesde && this.fechaHasta) {
-        await this.loadSalesByDateRange();
+        await this.loadSalesByDateRangeOptimized();
         return;
       }
       
@@ -323,28 +334,33 @@ export class AdminComponent implements OnInit {
         fechaParaConsulta = this.supabaseService.getHondurasDateTime();
       }
       
+      console.log('Cargando ventas optimizadas para fecha:', fechaParaConsulta);
       
-      // Cargar ventas usando el método existente
-      this.sales = await this.supabaseService.getSalesByDateAndSorteo(
+      // Usar método optimizado para una sola fecha
+      const optimizedData = await this.supabaseService.getDailyOptimizedData(
         fechaParaConsulta,
         this.selectedSorteoFilter
       );
       
+      // Asignar datos
+      this.sales = optimizedData.sales;
+      this.saleDetails = optimizedData.saleDetails;
+      this.cachedDashboardData = optimizedData.dashboardData;
+      this.lastDataFetch = new Date();
       
-      // Forzar actualización del array para trigger change detection
-      this.sales = [...(this.sales || [])];
-      
-      // Cargar detalles de cada venta
-      for (const sale of this.sales) {
-        this.saleDetails[sale.id] = await this.supabaseService.getSaleDetails(sale.id);
-      }
-      
+      console.log('Datos optimizados cargados:', {
+        ventas: this.sales.length,
+        totalVendido: optimizedData.dashboardData.totalVendido
+      });
       
       // Forzar detección de cambios
       this.cdr.detectChanges();
       
     } catch (error) {
+      console.error('Error al cargar ventas optimizadas:', error);
       this.sales = [];
+      this.saleDetails = {};
+      this.clearCache();
       this.notificationService.showError('Error al cargar las ventas');
     } finally {
       // Solo cambiar isLoading si no estamos en modo filtros
@@ -352,6 +368,82 @@ export class AdminComponent implements OnInit {
         this.isLoading = false;
       }
     }
+  }
+
+  // Método optimizado para rangos de fechas
+  async loadSalesByDateRangeOptimized(): Promise<void> {
+    if (!this.fechaDesde || !this.fechaHasta) {
+      await this.loadSingleDateSales();
+      return;
+    }
+
+    try {
+      console.log('Cargando rango de fechas optimizado:', this.fechaDesde, 'hasta', this.fechaHasta);
+      
+      // Convertir strings de datetime-local a fechas
+      const fechaDesdeUtc = this.supabaseService.parseLocalDateTimeToUtc(this.fechaDesde);
+      const fechaHastaUtc = this.supabaseService.parseLocalDateTimeToUtc(this.fechaHasta);
+      
+      // Validar fechas
+      if (fechaDesdeUtc > fechaHastaUtc) {
+        this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
+        this.sales = [];
+        this.saleDetails = {};
+        return;
+      }
+
+      // Usar método optimizado del servicio
+      const optimizedData = await this.supabaseService.getSalesWithDetailsOptimized(
+        fechaDesdeUtc,
+        fechaHastaUtc,
+        this.selectedSorteoFilter
+      );
+
+      // Asignar datos
+      this.sales = optimizedData.sales;
+      this.saleDetails = optimizedData.saleDetails;
+      
+      // Obtener datos del dashboard para el rango
+      const dashboardData = await this.supabaseService.getAdminDashboardData(
+        fechaDesdeUtc,
+        fechaHastaUtc,
+        this.selectedSorteoFilter
+      );
+      
+      this.cachedDashboardData = dashboardData;
+      this.cachedNumbersData = dashboardData.numerosPorSorteo;
+      this.lastDataFetch = new Date();
+      
+      console.log('Datos de rango optimizados cargados:', {
+        ventas: this.sales.length,
+        totalVendido: dashboardData.totalVendido
+      });
+      
+      // Forzar detección de cambios
+      this.cdr.detectChanges();
+      
+    } catch (error) {
+      console.error('Error al cargar rango optimizado:', error);
+      this.notificationService.showError('Error al cargar las ventas: ' + error);
+      this.sales = [];
+      this.saleDetails = {};
+      this.clearCache();
+    }
+  }
+
+  // Método para limpiar caché
+  private clearCache(): void {
+    this.cachedDashboardData = null;
+    this.cachedNumbersData = null;
+    this.lastDataFetch = null;
+  }
+
+  // Verificar si el caché es válido
+  private isCacheValid(): boolean {
+    if (!this.lastDataFetch || !this.cachedDashboardData) {
+      return false;
+    }
+    return (new Date().getTime() - this.lastDataFetch.getTime()) < this.cacheValidTime;
   }
 
 
@@ -428,7 +520,7 @@ export class AdminComponent implements OnInit {
       // Cargar datos de sorteos para cada tipo
       for (const sorteo of this.sorteos) {
         try {
-          const sorteoId = `${hondurasToday.toISOString().split('T')[0]}-${sorteo.name}`;
+          const sorteoId = `${this.supabaseService.formatDateOnlyForSupabase(hondurasToday)}-${sorteo.name}`;
           const sorteoData = await this.supabaseService.getSorteoById(sorteoId);
           
           if (sorteoData) {
@@ -458,7 +550,7 @@ export class AdminComponent implements OnInit {
   private async updateSorteoUI(sorteoName: string, winningNumber: string, multiplicador: number): Promise<void> {
   try {
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    const sorteoId = `${hondurasToday.toISOString().split('T')[0]}-${sorteoName}`;
+    const sorteoId = `${this.supabaseService.formatDateOnlyForSupabase(hondurasToday)}-${sorteoName}`;
 
     // Actualizar datos locales inmediatamente
     this.winningNumbers[sorteoName] = winningNumber;
@@ -525,11 +617,42 @@ export class AdminComponent implements OnInit {
 
   // Métodos para cards de resumen
   getTotalVendido(): number {
+    // Usar caché si está disponible y válido
+    if (this.isCacheValid() && this.cachedDashboardData) {
+      return this.cachedDashboardData.totalVendido;
+    }
+    
+    // Fallback al cálculo tradicional si no hay caché
     return this.sales.reduce((total, sale) => total + sale.total, 0);
   }
 
   getTotalPagado(): number {
-    return Object.values(this.sorteosData).reduce((total, sorteo) => total + (sorteo.totalPagado || 0), 0);
+    // Usar caché si está disponible y válido
+    if (this.isCacheValid() && this.cachedDashboardData) {
+      return this.cachedDashboardData.totalPagado;
+    }
+    
+    // Fallback al cálculo tradicional si no hay caché
+    let totalPagado = 0;
+    
+    // Calcular total pagado basándose en sorteos cerrados y números ganadores
+    for (const sale of this.sales) {
+      const sorteoSchedule = this.sorteos.find(s => s.name === sale.sorteo);
+      if (sorteoSchedule) {
+        const sorteoData = this.getSorteoData(sorteoSchedule);
+        if (sorteoData && sorteoData.cerrado && sorteoData.numeroGanador) {
+          const saleDetails = this.getSaleDetails(sale.id);
+          for (const detail of saleDetails) {
+            if (detail.numero.toString() === sorteoData.numeroGanador.toString()) {
+              const factor = sorteoData.factorMultiplicador || 70;
+              totalPagado += detail.monto * factor;
+            }
+          }
+        }
+      }
+    }
+    
+    return totalPagado;
   }
 
   getGananciaNeta(): number {
@@ -580,13 +703,13 @@ export class AdminComponent implements OnInit {
       this.isLoadingFilters = true;
       const hondurasToday = this.supabaseService.getHondurasDateTime();
       
-      // Reinicializar fechas usando date-fns
-      const fechaInicio = startOfDay(hondurasToday);
-      const fechaFin = endOfDay(hondurasToday);
+      // Reinicializar fechas usando zona horaria de Honduras
+      const fechaInicio = this.supabaseService.getStartOfDayHonduras(hondurasToday);
+      const fechaFin = this.supabaseService.getEndOfDayHonduras(hondurasToday);
       
-      this.fechaDesde = this.formatDateTimeLocal(fechaInicio);
-      this.fechaHasta = this.formatDateTimeLocal(fechaFin);
-      this.selectedDate = hondurasToday.toISOString().split('T')[0];
+      this.fechaDesde = this.supabaseService.formatDateTimeLocalHonduras(fechaInicio);
+      this.fechaHasta = this.supabaseService.formatDateTimeLocalHonduras(fechaFin);
+      this.selectedDate = this.supabaseService.formatDateTimeLocalHonduras(hondurasToday).split('T')[0];
       this.selectedSorteoFilter = '';
       
       
@@ -662,33 +785,32 @@ export class AdminComponent implements OnInit {
     }
     try {
       
-      // Usar date-fns para manejar las fechas correctamente
-      const fechaDesdeObj = startOfDay(new Date(this.fechaDesde));
-      const fechaHastaObj = endOfDay(new Date(this.fechaHasta));
-      
+      // Convertir strings de datetime-local a fechas UTC para la base de datos
+      const fechaDesdeUtc = this.supabaseService.parseLocalDateTimeToUtc(this.fechaDesde);
+      const fechaHastaUtc = this.supabaseService.parseLocalDateTimeToUtc(this.fechaHasta);
       
       // Validar que la fecha desde no sea mayor que la fecha hasta
-      if (fechaDesdeObj > fechaHastaObj) {
+      if (fechaDesdeUtc > fechaHastaUtc) {
         this.notificationService.showError('La fecha desde no puede ser mayor que la fecha hasta');
         this.sales = [];
         return;
       }
       
-      // Cargar ventas para cada día en el rango
+      // Cargar ventas para cada día en el rango usando fechas en Honduras
       let allSales: Sale[] = [];
-      let currentDate = new Date(fechaDesdeObj);
+      let currentDate = new Date(fechaDesdeUtc);
       let daysProcessed = 0;
       const maxDays = 31; // Límite de seguridad
       
-      while (currentDate <= fechaHastaObj && daysProcessed < maxDays) {
+      while (currentDate <= fechaHastaUtc && daysProcessed < maxDays) {
         
         const daySales = await this.supabaseService.getSalesByDateAndSorteo(currentDate, this.selectedSorteoFilter);
         
         allSales = [...allSales, ...daySales];
         
-        // Avanzar al siguiente día
+        // Avanzar al siguiente día usando fecha UTC
         currentDate = new Date(currentDate);
-        currentDate.setDate(currentDate.getDate() + 1);
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
         daysProcessed++;
       }
 
@@ -880,14 +1002,10 @@ export class AdminComponent implements OnInit {
     });
   }
 
-  // Método para formatear fecha para inputs datetime-local
+  // Método para formatear fecha para inputs datetime-local (DEPRECATED - usar supabaseService)
   private formatDateTimeLocal(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    // Delegar al servicio de Supabase para consistencia
+    return this.supabaseService.formatDateTimeLocalHonduras(date);
   }
 
   // Método para formatear fecha para mostrar en la UI
@@ -1073,7 +1191,7 @@ export class AdminComponent implements OnInit {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
       const hondurasToday = this.supabaseService.getHondurasDateTime();
-      link.setAttribute('download', `ventas_excel_${hondurasToday.toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `ventas_excel_${this.supabaseService.formatDateOnlyForSupabase(hondurasToday)}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -1255,7 +1373,7 @@ export class AdminComponent implements OnInit {
       
       // Usar fecha de Honduras
       const hondurasToday = this.supabaseService.getHondurasDateTime();
-      const fechaStr = hondurasToday.toISOString().split('T')[0];
+      const fechaStr = this.supabaseService.formatDateOnlyForSupabase(hondurasToday);
       const sorteoId = `${fechaStr}-${sorteo.name}`;
       
       // Crear sorteos por sucursal con factores específicos
@@ -1321,17 +1439,409 @@ export class AdminComponent implements OnInit {
 
   // Métodos para calcular totales en el resumen
   getTotalVendidoGeneral(): string {
-    const total = this.resumenSucursales.reduce((sum, s) => sum + (s.total_vendido || 0), 0);
+    const total = this.getTotalVendido();
     return total.toFixed(2);
   }
 
   getTotalPagadoGeneral(): string {
-    const total = this.resumenSucursales.reduce((sum, s) => sum + (s.total_pagado || 0), 0);
+    const total = this.getTotalPagado();
     return total.toFixed(2);
   }
 
   getGananciaTotalGeneral(): number {
-    return this.resumenSucursales.reduce((sum, s) => sum + (s.ganancia_neta || 0), 0);
+    return this.getGananciaNeta();
+  }
+
+  // Método para calcular el total de la cantidad del número ganador
+  getTotalCantidadNumeroGanador(): number {
+    if (!this.resumenSucursales || this.resumenSucursales.length === 0) {
+      return 0;
+    }
+    
+    return this.resumenSucursales.reduce((total, sucursal) => {
+      return total + (sucursal.cantidad_numero_ganador || 0);
+    }, 0);
+  }
+
+  // Método para obtener resumen de ventas por número
+  getNumbersSummary(): Array<{numero: number, totalVendido: number, cantidadVentas: number, porcentaje: number}> {
+    // Usar caché si está disponible y válido
+    if (this.isCacheValid() && this.cachedNumbersData) {
+      const totalGeneral = this.cachedNumbersData.get('total') || 0;
+      const result: Array<{numero: number, totalVendido: number, cantidadVentas: number, porcentaje: number}> = [];
+      
+      this.cachedNumbersData.forEach((value: any, key: string) => {
+        if (key !== 'total' && typeof value === 'object' && value.totalVendido !== undefined) {
+          result.push({
+            numero: parseInt(key),
+            totalVendido: value.totalVendido,
+            cantidadVentas: value.cantidadVentas,
+            porcentaje: totalGeneral > 0 ? (value.totalVendido / totalGeneral) * 100 : 0
+          });
+        }
+      });
+      
+      return result.sort((a, b) => b.totalVendido - a.totalVendido);
+    }
+    
+    // Fallback al cálculo tradicional si no hay caché
+    const sales = this.sales;
+    const numeroStats: { [numero: number]: { totalVendido: number, cantidadVentas: number } } = {};
+    let totalGeneral = 0;
+
+    // Procesar todas las ventas
+    sales.forEach((sale: Sale) => {
+      const details = this.getSaleDetails(sale.id);
+      details.forEach(detail => {
+        if (!numeroStats[detail.numero]) {
+          numeroStats[detail.numero] = { totalVendido: 0, cantidadVentas: 0 };
+        }
+        numeroStats[detail.numero].totalVendido += detail.monto;
+        numeroStats[detail.numero].cantidadVentas += 1;
+        totalGeneral += detail.monto;
+      });
+    });
+
+    // Convertir a array y calcular porcentajes
+    return Object.entries(numeroStats)
+      .map(([numero, stats]) => ({
+        numero: parseInt(numero),
+        totalVendido: stats.totalVendido,
+        cantidadVentas: stats.cantidadVentas,
+        porcentaje: totalGeneral > 0 ? (stats.totalVendido / totalGeneral) * 100 : 0
+      }))
+      .sort((a, b) => b.totalVendido - a.totalVendido); // Ordenar por total vendido descendente
+  }
+
+  // Método para obtener números vendidos agrupados por sorteo y sucursal
+  getNumbersSummaryBySorteoAndSucursal(): Array<{
+    sorteo: string, 
+    sucursales: Array<{
+      sucursal: string,
+      numeros: Array<{numero: number, totalVendido: number, cantidadVentas: number, porcentaje: number}>
+    }>
+  }> {
+    const groups: {[sorteo: string]: {[sucursal: string]: {[numero: number]: {totalVendido: number, cantidadVentas: number}}}} = {};
+    
+    // Agrupar por sorteo, sucursal y número
+    this.sales.forEach(sale => {
+      const sorteo = sale.sorteo || 'Sin Sorteo';
+      const sucursal = sale.sucursal || 'Sin Sucursal';
+      
+      if (!groups[sorteo]) {
+        groups[sorteo] = {};
+      }
+      if (!groups[sorteo][sucursal]) {
+        groups[sorteo][sucursal] = {};
+      }
+      
+      const details = this.getSaleDetails(sale.id);
+      details.forEach(detail => {
+        const numero = parseInt(detail.numero.toString());
+        if (!groups[sorteo][sucursal][numero]) {
+          groups[sorteo][sucursal][numero] = {totalVendido: 0, cantidadVentas: 0};
+        }
+        groups[sorteo][sucursal][numero].totalVendido += detail.monto;
+        groups[sorteo][sucursal][numero].cantidadVentas += 1;
+      });
+    });
+
+    // Convertir a array y calcular porcentajes
+    return Object.keys(groups).map(sorteo => {
+      const sorteoData = groups[sorteo];
+      
+      const sucursales = Object.keys(sorteoData).map(sucursal => {
+        const sucursalData = sorteoData[sucursal];
+        const totalSucursal = Object.values(sucursalData).reduce((sum, data) => sum + data.totalVendido, 0);
+        
+        const numeros = Object.keys(sucursalData).map(numeroStr => {
+          const numero = parseInt(numeroStr);
+          const data = sucursalData[numero];
+          return {
+            numero,
+            totalVendido: data.totalVendido,
+            cantidadVentas: data.cantidadVentas,
+            porcentaje: totalSucursal > 0 ? (data.totalVendido / totalSucursal) * 100 : 0
+          };
+        }).sort((a, b) => b.totalVendido - a.totalVendido);
+
+        return {
+          sucursal,
+          numeros
+        };
+      });
+
+      return {
+        sorteo,
+        sucursales
+      };
+    });
+  }
+
+  // Métodos auxiliares para la vista de números vendidos
+  getSorteoTotal(sorteoGroup: any): number {
+    return sorteoGroup.sucursales.reduce((total: number, sucursal: any) => {
+      return total + sucursal.numeros.reduce((subtotal: number, numero: any) => subtotal + numero.totalVendido, 0);
+    }, 0);
+  }
+
+  getSucursalTotal(sucursalGroup: any): number {
+    return sucursalGroup.numeros.reduce((total: number, numero: any) => total + numero.totalVendido, 0);
+  }
+
+  // Métodos para el tablero de números completo
+  getAllNumbers(): number[] {
+    const numbers = [];
+    for (let i = 0; i <= 99; i++) {
+      numbers.push(i);
+    }
+    return numbers;
+  }
+
+  getNumeroVenta(sucursalGroup: any, numero: number): number {
+    const numeroData = sucursalGroup.numeros.find((n: any) => n.numero === numero);
+    return numeroData ? numeroData.totalVendido : 0;
+  }
+
+  getNumeroIntensity(sucursalGroup: any, numero: number): string {
+    const venta = this.getNumeroVenta(sucursalGroup, numero);
+    const maxVenta = Math.max(...sucursalGroup.numeros.map((n: any) => n.totalVendido));
+    
+    if (venta === 0) return 'sin-venta';
+    if (maxVenta === 0) return 'sin-venta';
+    
+    const intensidad = venta / maxVenta;
+    
+    if (intensidad >= 0.8) return 'intensidad-muy-alta';
+    if (intensidad >= 0.6) return 'intensidad-alta';
+    if (intensidad >= 0.4) return 'intensidad-media';
+    if (intensidad >= 0.2) return 'intensidad-baja';
+    return 'intensidad-muy-baja';
+  }
+
+  // Métodos de exportación
+  private prepareReportData(): any {
+    // Obtener fecha del filtro actual
+    const fechaReporte = this.fechaDesde ? 
+      this.supabaseService.formatDateOnlyForSupabase(this.supabaseService.parseLocalDateTimeToUtc(this.fechaDesde)) :
+      this.selectedDate || this.supabaseService.formatDateOnlyForSupabase(this.supabaseService.getHondurasDateTime());
+    
+    const hondurasTime = this.supabaseService.getHondurasDateTime();
+    const fechaHora = this.supabaseService.formatHondurasDateTime(hondurasTime);
+    const [, hora, periodo] = fechaHora.split(' ');
+    
+    // Describir filtros aplicados
+    let filtroAplicado = 'Todos los datos';
+    if (this.fechaDesde && this.fechaHasta) {
+      filtroAplicado = `Desde: ${this.fechaDesde} Hasta: ${this.fechaHasta}`;
+    } else if (this.fechaDesde) {
+      filtroAplicado = `Desde: ${this.fechaDesde}`;
+    } else if (this.fechaHasta) {
+      filtroAplicado = `Hasta: ${this.fechaHasta}`;
+    }
+    if (this.selectedSorteoFilter) {
+      filtroAplicado += ` - Sorteo: ${this.selectedSorteoFilter}`;
+    }
+
+    // 1. DASHBOARD PRINCIPAL (4 cards como se ven en pantalla)
+    const dashboardData = {
+      totalVendido: this.getTotalVendido(),
+      totalPagado: this.getTotalPagado(),
+      gananciaNeta: this.getGananciaNeta(),
+      ventasTotales: this.getTotalVentas()
+    };
+
+    // 2. NÚMEROS POR SORTEO Y SUCURSAL (tableros completos como se ven)
+    const numerosPorSorteo = this.getNumbersSummaryBySorteoAndSucursal();
+
+    // 3. DETALLE POR SUCURSALES (LA PARTE MÁS IMPORTANTE)
+    const numeroGanador = this.resumenSucursales.length > 0 ? this.resumenSucursales[0].numero_ganador : '';
+    const detallePorSucursales = {
+      headers: ['Sucursal', 'Factor', `Cantidad #${numeroGanador}`, 'Total Vendido', 'Total Pagado', 'Ganancia Neta'],
+      filas: this.resumenSucursales.map(sucursal => ({
+        sucursal: sucursal.sucursal,
+        factor: `${sucursal.factor_multiplicador}x`,
+        cantidadNumeroGanador: sucursal.cantidad_numero_ganador || 0,
+        totalVendido: sucursal.total_vendido || 0,
+        totalPagado: sucursal.total_pagado || 0,
+        gananciaNeta: sucursal.ganancia_neta || 0
+      })),
+      totales: {
+        sucursal: 'TOTAL GENERAL',
+        factor: '-',
+        cantidadNumeroGanador: this.getTotalCantidadNumeroGanador(),
+        totalVendido: parseFloat(this.getTotalVendidoGeneral()),
+        totalPagado: parseFloat(this.getTotalPagadoGeneral()),
+        gananciaNeta: this.getGananciaTotalGeneral()
+      }
+    };
+
+    return {
+      // Información del reporte
+      fechaReporte: fechaReporte,
+      horaReporte: `${hora} ${periodo}`,
+      filtroAplicado: filtroAplicado,
+      
+      // Datos principales
+      dashboard: dashboardData,
+      numerosPorSorteo: numerosPorSorteo,
+      detallePorSucursales: detallePorSucursales
+    };
+  }
+
+  // Método para exportar datos tal como se ven en el admin
+  private prepareVisualReportData(): any {
+    // Datos del dashboard tal como aparecen en la interfaz admin
+    const totalVendidoGeneral = this.getTotalVendido();
+    const totalPagadoGeneral = this.getTotalPagado();
+    const gananciaNeta = totalVendidoGeneral - totalPagadoGeneral;
+    
+    // Usar timezone de Honduras para fecha y hora
+    const hondurasTime = this.supabaseService.getHondurasDateTime();
+    const fechaFormateada = this.supabaseService.formatHondurasDateTime(hondurasTime);
+    const [fecha, horaCompleta] = fechaFormateada.split(' ');
+    const hora = horaCompleta || '';
+    const periodo = fechaFormateada.includes('AM') ? 'AM' : 'PM';
+    
+    // Descripción de filtros
+    let filtrosAplicados = 'Todos los datos';
+    if (this.fechaDesde && this.fechaHasta) {
+      const fechaDesdeOnly = this.fechaDesde.split('T')[0];
+      const fechaHastaOnly = this.fechaHasta.split('T')[0];
+      filtrosAplicados = `Desde: ${fechaDesdeOnly} Hasta: ${fechaHastaOnly}`;
+    } else if (this.selectedDate) {
+      filtrosAplicados = `Fecha: ${this.selectedDate}`;
+    }
+    if (this.selectedSorteoFilter) {
+      filtrosAplicados += ` - Sorteo: ${this.selectedSorteoFilter}`;
+    }
+
+    // 1. DASHBOARD CARDS (como aparecen arriba del admin)
+    const dashboard = {
+      totalVendido: totalVendidoGeneral,
+      totalPagado: totalPagadoGeneral,
+      gananciaNeta: gananciaNeta,
+      ventasTotales: this.sales.length
+    };
+
+    // 2. NÚMEROS POR SORTEO (formato tablero como en el admin)
+    const numerosPorSorteo = this.getNumbersSummaryBySorteoAndSucursal();
+
+    // 3. DETALLE POR SUCURSALES (LA MÁS IMPORTANTE - exacto como tabla admin)
+    let detallePorSucursales;
+    
+    if (this.resumenSucursales && this.resumenSucursales.length > 0) {
+      // Usar datos existentes de resumenSucursales
+      detallePorSucursales = {
+        headers: ['Sucursal', 'Factor', 'Total Vendido', 'Total Pagado', 'Ganancia Neta'],
+        filas: this.resumenSucursales.map(resumen => [
+          resumen.sucursal,
+          `${resumen.factor_multiplicador || 70}x`,
+          `L ${(resumen.total_vendido || 0).toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${(resumen.total_pagado || 0).toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${(resumen.ganancia_neta || 0).toLocaleString('es-HN', {minimumFractionDigits: 2})}`
+        ]),
+        totales: [
+          'TOTAL GENERAL',
+          '',
+          `L ${totalVendidoGeneral.toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${totalPagadoGeneral.toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${gananciaNeta.toLocaleString('es-HN', {minimumFractionDigits: 2})}`
+        ]
+      };
+    } else {
+      // Calcular desde las ventas actuales si no hay resumenSucursales
+      const sucursalesMap = new Map();
+      
+      // Agrupar ventas por sucursal
+      this.sales.forEach(sale => {
+        const sucursal = sale.sucursal || 'Sin Sucursal';
+        if (!sucursalesMap.has(sucursal)) {
+          sucursalesMap.set(sucursal, {
+            sucursal: sucursal,
+            factor: 70, // Factor por defecto
+            totalVendido: 0,
+            totalPagado: 0,
+            gananciaNeta: 0
+          });
+        }
+        const data = sucursalesMap.get(sucursal);
+        data.totalVendido += sale.total;
+        
+        // Calcular total pagado basado en sorteos cerrados
+        const sorteoSchedule = this.sorteos.find(s => s.name === sale.sorteo);
+        if (sorteoSchedule) {
+          const sorteoData = this.getSorteoData(sorteoSchedule);
+          if (sorteoData && sorteoData.cerrado && sorteoData.numeroGanador) {
+            const saleDetails = this.getSaleDetails(sale.id);
+            saleDetails.forEach(detail => {
+              if (parseInt(detail.numero.toString()) === parseInt(sorteoData.numeroGanador || '0')) {
+                data.totalPagado += detail.monto * (sorteoData.factorMultiplicador || 70);
+              }
+            });
+          }
+        }
+        
+        data.gananciaNeta = data.totalVendido - data.totalPagado;
+      });
+      
+      const sucursalesArray = Array.from(sucursalesMap.values());
+      
+      detallePorSucursales = {
+        headers: ['Sucursal', 'Factor', 'Total Vendido', 'Total Pagado', 'Ganancia Neta'],
+        filas: sucursalesArray.map(sucursal => [
+          sucursal.sucursal,
+          `${sucursal.factor}x`,
+          `L ${sucursal.totalVendido.toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${sucursal.totalPagado.toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${sucursal.gananciaNeta.toLocaleString('es-HN', {minimumFractionDigits: 2})}`
+        ]),
+        totales: [
+          'TOTAL GENERAL',
+          '',
+          `L ${totalVendidoGeneral.toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${totalPagadoGeneral.toLocaleString('es-HN', {minimumFractionDigits: 2})}`,
+          `L ${gananciaNeta.toLocaleString('es-HN', {minimumFractionDigits: 2})}`
+        ]
+      };
+    }
+
+    return {
+      fecha: fecha || hondurasTime.toLocaleDateString('es-HN'),
+      hora: hora || hondurasTime.toLocaleTimeString('es-HN'),
+      filtros: filtrosAplicados,
+      dashboard: dashboard,
+      numerosPorSorteo: numerosPorSorteo,
+      detallePorSucursales: detallePorSucursales
+    };
+  }
+
+  async downloadDailyReportExcel(): Promise<void> {
+    try {
+      this.isLoading = true;
+      const reportData = this.prepareVisualReportData();
+      await this.exportService.exportVisualToExcel(reportData, `reporte-admin-visual-${this.selectedDate}`);
+      this.notificationService.showSuccess('Reporte Excel descargado exitosamente');
+    } catch (error) {
+      console.error('Error descargando reporte Excel:', error);
+      this.notificationService.showError('Error al descargar el reporte Excel');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async downloadDailyReportPDF(): Promise<void> {
+    try {
+      this.isLoading = true;
+      const reportData = this.prepareVisualReportData();
+      await this.exportService.exportVisualToPDF(reportData, `reporte-admin-visual-${this.selectedDate}`);
+      this.notificationService.showSuccess('Reporte PDF descargado exitosamente');
+    } catch (error) {
+      console.error('Error descargando reporte PDF:', error);
+      this.notificationService.showError('Error al descargar el reporte PDF');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
 }
