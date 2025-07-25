@@ -54,7 +54,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
   stepIncrement: number = 5; // Incremento de 5 en 5
 
   // Propiedades para tabs de sorteos
-  activeTab: 'manana' | 'tarde' | 'noche' = 'manana';
+  activeTab: 'mañana' | 'tarde' | 'noche' = 'mañana';
   sorteoData: { [key: string]: any } = {};
 
   // Propiedades para la hora de Honduras
@@ -260,6 +260,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
     const sucursalCode = sucursal.replace(/\s+/g, '').toUpperCase().substring(0, 3);
     const correlativoFormatted = correlativo.toString().padStart(4, '0');
 
+    console.log('Sucursal:', `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`);
     return `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`;
   }
 
@@ -851,7 +852,7 @@ Revisa la consola para más detalles.`);
 
       // Inicializar estructura
       this.sorteoData = {
-        manana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
+        mañana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         tarde: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         noche: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 }
       };
@@ -907,10 +908,10 @@ Revisa la consola para más detalles.`);
       // Procesar los datos agregándolos por sorteo
       if (data?.length) {
         data.forEach((sale: any) => {
-          const clave = sale.sorteo?.toLowerCase() as 'manana' | 'tarde' | 'noche';
-          let mapped: 'manana' | 'tarde' | 'noche' = clave;
+          const clave = sale.sorteo?.toLowerCase() as 'mañana' | 'tarde' | 'noche';
+          let mapped: 'mañana' | 'tarde' | 'noche' = clave;
           if (sale.sorteo?.toLowerCase() === 'mañana' || sale.sorteo?.toLowerCase() === 'manana') {
-            mapped = 'manana';
+            mapped = 'mañana';
           }
 
           const target = this.sorteoData[mapped];
@@ -936,7 +937,7 @@ Revisa la consola para más detalles.`);
 
 
   // Determinar el sorteo actual basado en la hora de Honduras y los horarios configurados
-  private getCurrentSorteoTab(): 'manana' | 'tarde' | 'noche' {
+  private getCurrentSorteoTab(): 'mañana' | 'tarde' | 'noche' {
     console.log('Determinando sorteo actual basado en hora de Honduras y horarios configurados...');
     
     // Obtener la hora actual de Honduras
@@ -1009,7 +1010,7 @@ Revisa la consola para más detalles.`);
 
     // Último fallback: usar mañana por defecto
     console.log('Último fallback: usando mañana por defecto');
-    return 'manana';
+    return 'mañana';
   }
 
   // Método para encontrar el sorteo que cerró más recientemente
@@ -1045,7 +1046,7 @@ Revisa la consola para más detalles.`);
   }
 
 
-  async setActiveTab(tab: 'manana' | 'tarde' | 'noche'): Promise<void> {
+  async setActiveTab(tab: 'mañana' | 'tarde' | 'noche'): Promise<void> {
     this.activeTab = tab;
     // Ya no necesitamos cargar números vendidos porque ya están cargados en loadAllSorteoData
     this.cdr.detectChanges();

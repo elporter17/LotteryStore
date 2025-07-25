@@ -169,7 +169,7 @@ export class PrintService {
       id: 'test-123',
       userId: 'user1',
       sucursal: 'Sucursal 1',
-      sorteo: 'manana',
+      sorteo: 'mañana',
       fecha: new Date(),
       total: 50,
       numeroRecibo: 'SUC-REC-250717-0001',

@@ -743,23 +743,34 @@ export class SupabaseService {
 
       // Procesar resultado de la función RPC completa
       const sorteoResumen: any = {
-        manana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
+        mañana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         tarde: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         noche: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 }
       };
 
       if (data && data.length > 0) {
         data.forEach((row: any) => {
-          const sorteoKey = row.sorteo?.toLowerCase() as 'manana' | 'tarde' | 'noche';
-          if (sorteoResumen[sorteoKey]) {
-            sorteoResumen[sorteoKey].totalVendido = parseFloat(row.total_vendido) || 0;
-            sorteoResumen[sorteoKey].numeroGanador = row.numero_ganador ? parseInt(row.numero_ganador) : null;
-            sorteoResumen[sorteoKey].factor = row.factor_multiplicador || 70;
-            sorteoResumen[sorteoKey].totalPagar = parseFloat(row.total_pagar) || 0;
+          // Map database values to object keys
+          let mappedKey: 'mañana' | 'tarde' | 'noche';
+          if (row.sorteo?.toLowerCase() === 'mañana' || row.sorteo?.toLowerCase() === 'manana') {
+            mappedKey = 'mañana';
+          } else if (row.sorteo?.toLowerCase() === 'tarde') {
+            mappedKey = 'tarde';
+          } else if (row.sorteo?.toLowerCase() === 'noche') {
+            mappedKey = 'noche';
+          } else {
+            return; // Skip unknown sorteo types
+          }
+          
+          if (sorteoResumen[mappedKey]) {
+            sorteoResumen[mappedKey].totalVendido = parseFloat(row.total_vendido) || 0;
+            sorteoResumen[mappedKey].numeroGanador = row.numero_ganador ? parseInt(row.numero_ganador) : null;
+            sorteoResumen[mappedKey].factor = row.factor_multiplicador || 70;
+            sorteoResumen[mappedKey].totalPagar = parseFloat(row.total_pagar) || 0;
 
             // Agregar números vendidos si están disponibles
             if (row.numeros_vendidos && typeof row.numeros_vendidos === 'object') {
-              sorteoResumen[sorteoKey].numerosVendidos = row.numeros_vendidos;
+              sorteoResumen[mappedKey].numerosVendidos = row.numeros_vendidos;
             }
           }
         });
@@ -792,19 +803,30 @@ export class SupabaseService {
       }
 
       const sorteoResumen: any = {
-        manana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
+        mañana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         tarde: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         noche: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 }
       };
 
       if (data && data.length > 0) {
         data.forEach((row: any) => {
-          const sorteoKey = row.sorteo?.toLowerCase() as 'manana' | 'tarde' | 'noche';
-          if (sorteoResumen[sorteoKey]) {
-            sorteoResumen[sorteoKey].totalVendido = parseFloat(row.total_vendido) || 0;
-            sorteoResumen[sorteoKey].numeroGanador = row.numero_ganador ? parseInt(row.numero_ganador) : null;
-            sorteoResumen[sorteoKey].factor = row.factor_multiplicador || 70;
-            sorteoResumen[sorteoKey].totalPagar = parseFloat(row.total_pagar) || 0;
+          // Map database values to object keys
+          let mappedKey: 'mañana' | 'tarde' | 'noche';
+          if (row.sorteo?.toLowerCase() === 'mañana' || row.sorteo?.toLowerCase() === 'manana') {
+            mappedKey = 'mañana';
+          } else if (row.sorteo?.toLowerCase() === 'tarde') {
+            mappedKey = 'tarde';
+          } else if (row.sorteo?.toLowerCase() === 'noche') {
+            mappedKey = 'noche';
+          } else {
+            return; // Skip unknown sorteo types
+          }
+          
+          if (sorteoResumen[mappedKey]) {
+            sorteoResumen[mappedKey].totalVendido = parseFloat(row.total_vendido) || 0;
+            sorteoResumen[mappedKey].numeroGanador = row.numero_ganador ? parseInt(row.numero_ganador) : null;
+            sorteoResumen[mappedKey].factor = row.factor_multiplicador || 70;
+            sorteoResumen[mappedKey].totalPagar = parseFloat(row.total_pagar) || 0;
             // Los números vendidos se cargarán lazy cuando se necesiten
           }
         });
@@ -882,7 +904,7 @@ export class SupabaseService {
         .like('id', `${fechaStr}-%`);
 
       const sorteoResumen: any = {
-        manana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
+        mañana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         tarde: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
         noche: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 }
       };
@@ -890,9 +912,20 @@ export class SupabaseService {
       // Procesar totales
       if (totalesData && !totalesError) {
         totalesData.forEach((item: any) => {
-          const sorteoKey = item.sorteo?.toLowerCase() as 'manana' | 'tarde' | 'noche';
-          if (sorteoResumen[sorteoKey]) {
-            sorteoResumen[sorteoKey].totalVendido = item.sum || 0;
+          // Map database values to object keys
+          let mappedKey: 'mañana' | 'tarde' | 'noche';
+          if (item.sorteo?.toLowerCase() === 'mañana' || item.sorteo?.toLowerCase() === 'manana') {
+            mappedKey = 'mañana';
+          } else if (item.sorteo?.toLowerCase() === 'tarde') {
+            mappedKey = 'tarde';
+          } else if (item.sorteo?.toLowerCase() === 'noche') {
+            mappedKey = 'noche';
+          } else {
+            return; // Skip unknown sorteo types
+          }
+          
+          if (sorteoResumen[mappedKey]) {
+            sorteoResumen[mappedKey].totalVendido = item.sum || 0;
           }
         });
       }
@@ -900,10 +933,21 @@ export class SupabaseService {
       // Procesar info de sorteos
       if (sorteosData && !sorteosError) {
         sorteosData.forEach((sorteo: any) => {
-          const sorteoKey = sorteo.sorteo?.toLowerCase() as 'manana' | 'tarde' | 'noche';
-          if (sorteoResumen[sorteoKey]) {
-            sorteoResumen[sorteoKey].numeroGanador = sorteo.numero_ganador ? parseInt(sorteo.numero_ganador) : null;
-            sorteoResumen[sorteoKey].factor = sorteo.factor_multiplicador || 70;
+          // Map database values to object keys
+          let mappedKey: 'mañana' | 'tarde' | 'noche';
+          if (sorteo.sorteo?.toLowerCase() === 'mañana' || sorteo.sorteo?.toLowerCase() === 'manana') {
+            mappedKey = 'mañana';
+          } else if (sorteo.sorteo?.toLowerCase() === 'tarde') {
+            mappedKey = 'tarde';
+          } else if (sorteo.sorteo?.toLowerCase() === 'noche') {
+            mappedKey = 'noche';
+          } else {
+            return; // Skip unknown sorteo types
+          }
+          
+          if (sorteoResumen[mappedKey]) {
+            sorteoResumen[mappedKey].numeroGanador = sorteo.numero_ganador ? parseInt(sorteo.numero_ganador) : null;
+            sorteoResumen[mappedKey].factor = sorteo.factor_multiplicador || 70;
             // No calculamos total a pagar sin los números individuales
           }
         });

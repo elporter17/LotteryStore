@@ -137,8 +137,8 @@
   <div class="sorteos-tabs-section">
     <div class="tabs-header">
       <button class="tab-btn" 
-              [class.active]="activeTab === 'manana'"
-              (click)="setActiveTab('manana')">
+              [class.active]="activeTab === 'mañana'"
+              (click)="setActiveTab('mañana')">
         <i class="fas fa-sun"></i> Mañana
       </button>
       <button class="tab-btn" 
@@ -155,31 +155,31 @@
 
     <div class="tab-content">
       <!-- Tab Mañana -->
-      <div *ngIf="activeTab === 'manana'" class="tab-panel">
+      <div *ngIf="activeTab === 'mañana'" class="tab-panel">
         <div class="sorteo-summary">
           <div class="summary-card">
             <div class="summary-label">Total Vendido</div>
-            <div class="summary-value">L {{ getSorteoTotalVendido('manana').toFixed(2) }}</div>
+            <div class="summary-value">L {{ getSorteoTotalVendido('mañana').toFixed(2) }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoNumeroGanador('manana') !== null">
+          <div class="summary-card" *ngIf="getSorteoNumeroGanador('mañana') !== null">
             <div class="summary-label">Número Ganador</div>
-            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('manana')!.toString().padStart(2, '0') }}</div>
+            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('mañana')!.toString().padStart(2, '0') }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoTotalPagar('manana') > 0">
+          <div class="summary-card" *ngIf="getSorteoTotalPagar('mañana') > 0">
             <div class="summary-label">Total a Pagar</div>
-            <div class="summary-value payout">L {{ getSorteoTotalPagar('manana').toFixed(2) }}</div>
+            <div class="summary-value payout">L {{ getSorteoTotalPagar('mañana').toFixed(2) }}</div>
           </div>
         </div>
         
         <div class="numeros-vendidos">
           <h5>Números Vendidos</h5>
-          <div *ngIf="getSorteoNumerosVendidos('manana').length > 0" class="numeros-grid">
-            <div *ngFor="let numero of getSorteoNumerosVendidos('manana')" class="numero-vendido-item">
+          <div *ngIf="getSorteoNumerosVendidos('mañana').length > 0" class="numeros-grid">
+            <div *ngFor="let numero of getSorteoNumerosVendidos('mañana')" class="numero-vendido-item">
               <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
               <span class="monto">L {{ numero.total.toFixed(0) }}</span>
             </div>
           </div>
-          <div *ngIf="getSorteoNumerosVendidos('manana').length === 0" class="no-data">
+          <div *ngIf="getSorteoNumerosVendidos('mañana').length === 0" class="no-data">
             <p>No hay números vendidos para este sorteo</p>
           </div>
         </div>
@@ -396,11 +396,11 @@
               APUESTA: L {{ tempAmount || 0 }}
             </div>
             <div class="confirmation-buttons">
-              <button type="button" class="btn btn-success btn-lg" (click)="confirmAddNumber()">
-                <i class="fas fa-check"></i> CONFIRMAR
-              </button>
               <button type="button" class="btn btn-secondary btn-lg" (click)="cancelAddNumber()">
                 <i class="fas fa-times"></i> Cancelar
+              </button>
+               <button type="button" class="btn btn-success btn-lg" (click)="confirmAddNumber()">
+                <i class="fas fa-check"></i> CONFIRMAR
               </button>
             </div>
           </div>
