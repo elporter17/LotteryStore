@@ -10,13 +10,16 @@ import { SucursalComponent } from './components/sucursal/sucursal.component';
 import { AdminComponent } from './components/admin/admin.component';
 import { UserManagementComponent } from './components/user-management/user-management.component';
 import { ResumenSorteosComponent } from './components/resumen-sorteos/resumen-sorteos.component';
+import { CierreCajaComponent } from './components/cierre-caja/cierre-caja.component';
 import { AuthGuard } from './guards/auth.guard';
 import { AdminGuard } from './guards/admin.guard';
+import { SucursalGuard } from './guards/sucursal.guard';
 
 const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   { path: 'login', component: LoginComponent },
   { path: 'sucursal', component: SucursalComponent, canActivate: [AuthGuard] },
+  { path: 'cierre-caja', component: CierreCajaComponent, canActivate: [AuthGuard, SucursalGuard] },
   { path: 'admin', component: AdminComponent, canActivate: [AuthGuard, AdminGuard] },
   { path: 'admin/users', component: UserManagementComponent, canActivate: [AuthGuard, AdminGuard] },
   { path: '**', redirectTo: '/login' }
@@ -28,7 +31,8 @@ const routes: Routes = [
     LoginComponent,
     SucursalComponent,
     AdminComponent,
-    UserManagementComponent
+    UserManagementComponent,
+    CierreCajaComponent
   ],
   imports: [
     BrowserModule,
@@ -37,7 +41,7 @@ const routes: Routes = [
     RouterModule.forRoot(routes),
     ResumenSorteosComponent
   ],
-  providers: [ AuthGuard, AdminGuard],
+  providers: [ AuthGuard, AdminGuard, SucursalGuard],
   bootstrap: [AppComponent]
 })
 export class AppModule { }

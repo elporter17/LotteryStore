@@ -68,6 +68,60 @@ export interface SorteoSchedule {
 
 export const SORTEO_SCHEDULES: SorteoSchedule[] = [
   { name: 'mañana', label: 'Mañana', closeTime: '9:15' , openTime: '00:47' },
-  { name: 'tarde', label: 'Tarde', closeTime: '14:55', openTime: '13:00' },
-  { name: 'noche', label: 'Noche', closeTime: '22:40', openTime: '20:00' }
+  { name: 'tarde', label: 'Tarde', closeTime: '14:55', openTime: '10:00' },
+  { name: 'noche', label: 'Noche', closeTime: '17:22', openTime: '15:00' }
 ];
+
+// Interfaces para módulo de cierre de caja y pagos
+export interface MovimientoCaja {
+  id: string;
+  tipo: 'entrada' | 'salida';
+  motivo: string;
+  monto: number;
+  usuarioId: string;
+  sorteoId?: string;
+  fecha: Date;
+  sucursal: string;
+  nombreReceptor?: string; // Para pagos de sorteo
+  createdAt: Date;
+}
+
+export interface CierreDiario {
+  id: string;
+  fecha: Date;
+  usuarioId: string;
+  sucursal: string;
+  totalVendido: number;
+  totalPagado: number;
+  neto: number;
+  efectivoReportado: number;
+  diferencia: number;
+  notas?: string;
+  sorteosMañana?: SorteoResumen;
+  sorteosTarde?: SorteoResumen;
+  sorteosNoche?: SorteoResumen;
+  createdAt: Date;
+}
+
+export interface SorteoResumen {
+  numeroGanador?: string;
+  factor: number;
+  ventaPorNumero: number;
+  totalVendido: number;
+  totalPagado: number;
+  totalNeto: number;
+}
+
+export interface PagoSorteo {
+  sorteoId: string;
+  numeroGanador: string;
+  factor: number;
+  ventaPorNumero: number; // Cuánto se vendió específicamente del número ganador
+  totalVendido: number;
+  totalPagar: number;
+  totalNeto: number;
+  sucursal: string;
+  nombreReceptor?: string;
+  pagado?: boolean; // Campo para marcar si ya fue pagado
+  fechaPago?: Date; // Fecha cuando se realizó el pago
+}

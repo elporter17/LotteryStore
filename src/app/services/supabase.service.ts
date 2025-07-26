@@ -2566,4 +2566,562 @@ export class SupabaseService {
     }
   }
 
+  // ================== MÓDULO DE CIERRE DE CAJA Y PAGOS ==================
+
+  // Función para obtener usuario actual (requerida por el componente de cierre)
+  async getCurrentUser(): Promise<User | null> {
+    return this.currentUserSubject.value;
+  }
+
+  // ================== MOVIMIENTOS DE CAJA ==================
+
+  async registrarMovimientoCaja(movimiento: Partial<import('../models/interfaces').MovimientoCaja>): Promise<void> {
+    try {
+      const { data, error } = await this.supabase
+        .from('movimientos_caja')
+        .insert({
+          tipo: movimiento.tipo,
+          motivo: movimiento.motivo,
+          monto: movimiento.monto,
+          usuario_id: movimiento.usuarioId,
+          sorteo_id: movimiento.sorteoId,
+          fecha: this.formatLocalDateForSupabase(movimiento.fecha!),
+          sucursal: movimiento.sucursal,
+          nombre_receptor: movimiento.nombreReceptor
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error al registrar movimiento de caja:', error);
+      throw error;
+    }
+  }
+
+  async obtenerMovimientosCaja(fecha: Date, sucursal: string): Promise<import('../models/interfaces').MovimientoCaja[]> {
+    try {
+      const startOfDay = this.getStartOfDayHonduras(fecha);
+      const endOfDay = this.getEndOfDayHonduras(fecha);
+      
+      const { data, error } = await this.supabase
+        .from('movimientos_caja')
+        .select('*')
+        .eq('sucursal', sucursal)
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay))
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map(row => ({
+        id: row.id,
+        tipo: row.tipo,
+        motivo: row.motivo,
+        monto: parseFloat(row.monto),
+        usuarioId: row.usuario_id,
+        sorteoId: row.sorteo_id,
+        fecha: new Date(row.fecha),
+        sucursal: row.sucursal,
+        nombreReceptor: row.nombre_receptor,
+        createdAt: new Date(row.created_at)
+      }));
+    } catch (error) {
+      console.error('Error al obtener movimientos de caja:', error);
+      return [];
+    }
+  }
+
+  // ================== RESUMEN DE CAJA DIARIO ==================
+
+  async calcularResumenCajaDiario(fecha: Date, sucursal: string): Promise<any> {
+    try {
+      const fechaStr = this.formatDateOnlyForSupabase(fecha);
+
+      // Usar la función SQL creada para calcular el resumen
+      const { data, error } = await this.supabase
+        .rpc('calcular_resumen_caja_diario', {
+          p_fecha: fechaStr,
+          p_sucursal: sucursal
+        });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const resultado = data[0];
+        return {
+          total_vendido: parseFloat(resultado.total_vendido || '0'),
+          total_pagado: parseFloat(resultado.total_pagado || '0'),
+          total_neto: parseFloat(resultado.total_neto || '0'),
+          movimientos_entrada: parseFloat(resultado.movimientos_entrada || '0'),
+          movimientos_salida: parseFloat(resultado.movimientos_salida || '0'),
+          balance_final: parseFloat(resultado.balance_final || '0')
+        };
+      }
+
+      return {
+        total_vendido: 0,
+        total_pagado: 0,
+        total_neto: 0,
+        movimientos_entrada: 0,
+        movimientos_salida: 0,
+        balance_final: 0
+      };
+    } catch (error) {
+      console.error('Error al calcular resumen de caja diario:', error);
+      // Fallback: calcular manualmente
+      return await this.calcularResumenCajaManual(fecha, sucursal);
+    }
+  }
+
+  private async calcularResumenCajaManual(fecha: Date, sucursal: string): Promise<any> {
+    try {
+      const startOfDay = this.getStartOfDayHonduras(fecha);
+      const endOfDay = this.getEndOfDayHonduras(fecha);
+      
+      // Calcular total vendido
+      const { data: salesData, error: salesError } = await this.supabase
+        .from('sales')
+        .select('total')
+        .eq('sucursal', sucursal)
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+
+      if (salesError) throw salesError;
+
+      const totalVendido = (salesData || []).reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+
+      // El total_pagado ahora se calcula solo desde los movimientos de caja reales (pagos efectivos)
+      // Ya no se resta automáticamente desde sorteos cerrados
+      // Solo se contabiliza cuando efectivamente se paga el premio en el cierre
+      const { data: pagosSorteosData, error: pagosSorteosError } = await this.supabase
+        .from('movimientos_caja')
+        .select('monto')
+        .eq('sucursal', sucursal)
+        .eq('tipo', 'salida')
+        .not('sorteoId', 'is', null) // Solo movimientos que son pagos de sorteos
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+
+      if (pagosSorteosError) throw pagosSorteosError;
+
+      const totalPagado = (pagosSorteosData || []).reduce((sum, pago) => sum + parseFloat(pago.monto || '0'), 0);
+
+      // Calcular movimientos de caja
+      const { data: movimientosData, error: movimientosError } = await this.supabase
+        .from('movimientos_caja')
+        .select('tipo, monto')
+        .eq('sucursal', sucursal)
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+
+      if (movimientosError) throw movimientosError;
+
+      let movimientosEntrada = 0;
+      let movimientosSalida = 0;
+
+      (movimientosData || []).forEach(mov => {
+        const monto = parseFloat(mov.monto);
+        if (mov.tipo === 'entrada') {
+          movimientosEntrada += monto;
+        } else {
+          movimientosSalida += monto;
+        }
+      });
+
+      const totalNeto = totalVendido - totalPagado;
+      const balanceFinal = totalNeto + movimientosEntrada - movimientosSalida;
+
+      return {
+        total_vendido: totalVendido,
+        total_pagado: totalPagado,
+        total_neto: totalNeto,
+        movimientos_entrada: movimientosEntrada,
+        movimientos_salida: movimientosSalida,
+        balance_final: balanceFinal
+      };
+    } catch (error) {
+      console.error('Error en cálculo manual de resumen de caja:', error);
+      return {
+        total_vendido: 0,
+        total_pagado: 0,
+        total_neto: 0,
+        movimientos_entrada: 0,
+        movimientos_salida: 0,
+        balance_final: 0
+      };
+    }
+  }
+
+  // ================== SORTEOS PENDIENTES DE PAGO ==================
+
+  async obtenerSorteosPendientesPago(fecha: Date, sucursal: string): Promise<any[]> {
+    try {
+      const startOfDay = this.getStartOfDayHonduras(fecha);
+      const endOfDay = this.getEndOfDayHonduras(fecha);
+
+      // Obtener sorteos pendientes
+      const { data: sorteosData, error } = await this.supabase
+        .from('sorteos')
+        .select('*')
+        .eq('sucursal', sucursal)
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay))
+        .gt('total_pagado', 0)
+        .order('sorteo');
+
+      if (error) throw error;
+
+      // Filtrar solo los que realmente tengan premios que pagar
+      const sorteosPendientes = sorteosData
+
+      // Obtener movimientos de caja para verificar pagos realizados
+      const { data: movimientosData, error: movimientosError } = await this.supabase
+        .from('movimientos_caja')
+        .select('sorteo_id, tipo, motivo')
+        .eq('sucursal', sucursal)
+        .eq('tipo', 'salida')
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+
+      if (movimientosError) {
+        console.warn('Error obteniendo movimientos de caja:', movimientosError);
+      }
+
+      // Crear mapa de sorteos ya pagados
+      const sorteosPagados = new Set();
+      (movimientosData || []).forEach(movimiento => {
+        if (movimiento.motivo && 
+            movimiento.motivo.includes('Pago premio sorteo') && 
+            movimiento.sorteo_id) {
+          sorteosPagados.add(movimiento.sorteo_id);
+        }
+      });
+
+      if (sorteosPendientes.length === 0) {
+        return [];
+      }
+
+      // NO filtrar por estado de pago - mostrar TODOS los sorteos con premios
+      // Solo verificar que tengan número ganador y total a pagar
+      const sorteosTodos = sorteosPendientes; // Mostrar todos, no filtrar por pagados
+
+      // Optimización: obtener todas las ventas del día de una vez con JOIN interno
+      const { data: ventasData, error: ventasError } = await this.supabase
+        .from('sales')
+        .select(`
+          sorteo,
+          sale_details!inner(numero, monto)
+        `)
+        .eq('sucursal', sucursal)
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay))
+        .in('sorteo', sorteosTodos.map(s => s.sorteo));
+
+      if (ventasError) {
+        console.warn('Error obteniendo ventas del día:', ventasError);
+      }
+
+      // Crear mapa de ventas por sorteo y número
+      const ventasPorSorteo = new Map();
+      (ventasData || []).forEach(venta => {
+        if (!ventasPorSorteo.has(venta.sorteo)) {
+          ventasPorSorteo.set(venta.sorteo, new Map());
+        }
+        
+        const sorteoMap = ventasPorSorteo.get(venta.sorteo);
+        venta.sale_details.forEach(detalle => {
+          const numero = parseInt(detalle.numero);
+          const monto = parseFloat(detalle.monto || 0);
+          
+          if (sorteoMap.has(numero)) {
+            sorteoMap.set(numero, sorteoMap.get(numero) + monto);
+          } else {
+            sorteoMap.set(numero, monto);
+          }
+        });
+      });
+
+      // Procesar cada sorteo con los datos ya cargados
+      const sorteosConDetalle = sorteosTodos.map(sorteo => {
+        const numeroGanador = parseInt(sorteo.numero_ganador);
+        const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 75);
+        
+        // Obtener cantidad comprada del número ganador
+        let cantidadCompradaNumeroGanador = 0;
+        if (ventasPorSorteo.has(sorteo.sorteo)) {
+          cantidadCompradaNumeroGanador = ventasPorSorteo.get(sorteo.sorteo).get(numeroGanador) || 0;
+        }
+
+        // Calcular total que se debe pagar
+        const totalCalculadoPagar = cantidadCompradaNumeroGanador * factorMultiplicador;
+        const totalOriginal = parseFloat(sorteo.total_pagado || '0');
+
+        return {
+          ...sorteo,
+          cantidad_comprada_numero_ganador: cantidadCompradaNumeroGanador,
+          total_calculado_pagar: totalCalculadoPagar,
+          factor_multiplicador: factorMultiplicador,
+          ya_pagado: sorteosPagados.has(sorteo.id),
+          // Para verificación, incluir el cálculo
+          calculo_detalle: {
+            cantidad_comprada: cantidadCompradaNumeroGanador,
+            factor: factorMultiplicador,
+            total_calculado: totalCalculadoPagar,
+            total_original: totalOriginal,
+            diferencia: Math.abs(totalCalculadoPagar - totalOriginal),
+            coincide: Math.abs(totalCalculadoPagar - totalOriginal) < 0.01 // Tolerancia de 1 centavo
+          }
+        };
+      });
+
+      return sorteosConDetalle;
+    } catch (error) {
+      console.error('Error al obtener sorteos pendientes de pago:', error);
+      return [];
+    }
+  }
+
+  // ================== CIERRES DIARIOS ==================
+
+  async obtenerCierreDiario(fecha: Date, sucursal: string): Promise<import('../models/interfaces').CierreDiario | null> {
+    try {
+      const fechaStr = this.formatDateOnlyForSupabase(fecha);
+
+      const { data, error } = await this.supabase
+        .from('cierres_diarios')
+        .select('*')
+        .eq('fecha', fechaStr)
+        .eq('sucursal', sucursal)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No existe cierre para esta fecha
+          return null;
+        }
+        throw error;
+      }
+
+      return {
+        id: data.id,
+        fecha: new Date(data.fecha),
+        usuarioId: data.usuario_id,
+        sucursal: data.sucursal,
+        totalVendido: parseFloat(data.total_vendido),
+        totalPagado: parseFloat(data.total_pagado),
+        neto: parseFloat(data.neto),
+        efectivoReportado: parseFloat(data.efectivo_reportado),
+        diferencia: parseFloat(data.diferencia),
+        notas: data.notas,
+        sorteosMañana: data.sorteos_manana,
+        sorteosTarde: data.sorteos_tarde,
+        sorteosNoche: data.sorteos_noche,
+        createdAt: new Date(data.created_at)
+      };
+    } catch (error) {
+      console.error('Error al obtener cierre diario:', error);
+      return null;
+    }
+  }
+
+  async registrarCierreDiario(cierre: Partial<import('../models/interfaces').CierreDiario>): Promise<void> {
+    try {
+      const { data, error } = await this.supabase
+        .from('cierres_diarios')
+        .insert({
+          fecha: this.formatDateOnlyForSupabase(cierre.fecha!),
+          usuario_id: cierre.usuarioId,
+          sucursal: cierre.sucursal,
+          total_vendido: cierre.totalVendido,
+          total_pagado: cierre.totalPagado,
+          neto: cierre.neto,
+          efectivo_reportado: cierre.efectivoReportado,
+          diferencia: cierre.diferencia,
+          notas: cierre.notas,
+          sorteos_manana: cierre.sorteosMañana,
+          sorteos_tarde: cierre.sorteosTarde,
+          sorteos_noche: cierre.sorteosNoche
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error al registrar cierre diario:', error);
+      throw error;
+    }
+  }
+
+  // ================== RESUMEN POR SORTEO ==================
+
+  async obtenerResumenSorteo(fecha: Date, sucursal: string, sorteo: string): Promise<import('../models/interfaces').SorteoResumen | undefined> {
+    try {
+      const fechaStr = this.formatDateOnlyForSupabase(fecha);
+
+      // Usar la función SQL si está disponible
+      const { data, error } = await this.supabase
+        .rpc('obtener_resumen_sorteo', {
+          p_fecha: fechaStr,
+          p_sucursal: sucursal,
+          p_sorteo: sorteo
+        });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const resultado = data[0];
+        return {
+          numeroGanador: resultado.numero_ganador,
+          factor: parseInt(resultado.factor_multiplicador || '70'),
+          ventaPorNumero: parseFloat(resultado.venta_por_numero || '0'),
+          totalVendido: parseFloat(resultado.total_vendido || '0'),
+          totalPagado: parseFloat(resultado.total_pagado || '0'),
+          totalNeto: parseFloat(resultado.total_neto || '0')
+        };
+      }
+
+      return undefined;
+    } catch (error) {
+      console.warn(`Error al obtener resumen del sorteo ${sorteo}:`, error);
+      // Fallback: obtener datos básicos del sorteo
+      return await this.obtenerResumenSorteoBasico(fecha, sucursal, sorteo);
+    }
+  }
+
+  private async obtenerResumenSorteoBasico(fecha: Date, sucursal: string, sorteo: string): Promise<import('../models/interfaces').SorteoResumen | undefined> {
+    try {
+      const sorteoId = `${this.formatDateOnlyForSupabase(fecha)}-${sorteo}`;
+      
+      const { data, error } = await this.supabase
+        .from('sorteos')
+        .select('*')
+        .eq('id', sorteoId)
+        .eq('sucursal', sucursal)
+        .single();
+
+      if (error || !data) return undefined;
+
+      let ventaPorNumero = 0;
+      
+      if (data.numero_ganador) {
+        // Calcular venta específica del número ganador
+        const { data: ventaData, error: ventaError } = await this.supabase
+          .from('sales')
+          .select(`
+            sale_details!inner(monto)
+          `)
+          .eq('sucursal', sucursal)
+          .eq('sorteo', sorteo)
+          .eq('sale_details.numero', parseInt(data.numero_ganador))
+          .gte('fecha', this.formatLocalDateForSupabase(this.getStartOfDayHonduras(fecha)))
+          .lte('fecha', this.formatLocalDateForSupabase(this.getEndOfDayHonduras(fecha)));
+
+        if (!ventaError && ventaData) {
+          ventaPorNumero = ventaData.reduce((sum, sale) => 
+            sum + (sale.sale_details || []).reduce((detailSum: number, detail: any) => 
+              detailSum + parseFloat(detail.monto), 0), 0);
+        }
+      }
+
+      return {
+        numeroGanador: data.numero_ganador,
+        factor: parseInt(data.factor_multiplicador || '70'),
+        ventaPorNumero,
+        totalVendido: parseFloat(data.total_vendido || '0'),
+        totalPagado: parseFloat(data.total_pagado || '0'),
+        totalNeto: parseFloat(data.ganancia_neta || '0')
+      };
+    } catch (error) {
+      console.error('Error en obtenerResumenSorteoBasico:', error);
+      return undefined;
+    }
+  }
+
+  // ===== MÉTODOS FALTANTES PARA ADMIN Y CIERRE DE CAJA =====
+
+  /**
+   * Obtener usuarios por rol
+   */
+  async getUsersByRole(role: string): Promise<any[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', role)
+        .eq('active', true);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error obteniendo usuarios por rol:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Identificar sorteos pagados del día
+   */
+  async identificarSorteosPagados(fecha: Date): Promise<string[]> {
+    try {
+      const fechaStr = this.formatDateOnlyForSupabase(fecha);
+      
+      const { data, error } = await this.supabase
+        .from('movimientos_caja')
+        .select('sorteo_id')
+        .like('sorteo_id', `${fechaStr}-%`)
+        .not('sorteo_id', 'is', null);
+
+      if (error) throw error;
+      
+      return [...new Set((data || []).map(item => item.sorteo_id))];
+    } catch (error) {
+      console.error('Error identificando sorteos pagados:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Cargar sucursales disponibles para admin
+   */
+  async cargarSucursalesDisponibles(): Promise<string[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('profiles')
+        .select('sucursal')
+        .eq('role', 'sucursal')
+        .eq('active', true)
+        .not('sucursal', 'is', null);
+
+      if (error) throw error;
+      
+      const sucursales = [...new Set((data || []).map(item => item.sucursal))];
+      return sucursales.filter(s => s && s.trim() !== '');
+    } catch (error) {
+      console.error('Error cargando sucursales:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Cargar datos de cierre de caja para una sucursal específica
+   */
+  async cargarDatosCierreCajaSucursal(sucursal: string, fecha: Date): Promise<any> {
+    try {
+      // Obtener los datos básicos de resumen de caja
+      const resumenCaja = await this.calcularResumenCajaDiario(fecha, sucursal);
+      
+      // Obtener sorteos pendientes con información detallada
+      const sorteosPendientes = await this.obtenerSorteosPendientesPago(fecha, sucursal);
+      
+      // Obtener movimientos de caja
+      const movimientosCaja = await this.obtenerMovimientosCaja(fecha, sucursal);
+      
+      return {
+        resumenCaja,
+        sorteosPendientes,
+        movimientosCaja
+      };
+    } catch (error) {
+      console.error('Error cargando datos de cierre de caja:', error);
+      throw error;
+    }
+  }
+
 }

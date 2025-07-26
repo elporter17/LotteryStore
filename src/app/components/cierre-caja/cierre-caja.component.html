@@ -1,0 +1,454 @@
+<div class="cierre-caja-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <button class="btn btn-back" routerLink="/sucursal" [disabled]="loading">
+        <i class="fas fa-arrow-left"></i>
+        Regresar a Ventas
+      </button>
+    </div>
+    <h2>💰 Cierre de Caja</h2>
+    <div class="fecha-sucursal">
+      <span class="fecha">📅 {{ fechaHoy | date:'dd/MM/yyyy' }}</span>
+      <span class="sucursal">🏪 {{ currentUser?.sucursal }}</span>
+    </div>
+  </div>
+
+  <!-- Estado del cierre -->
+  <div class="alert" [ngClass]="yaCerrado ? 'alert-info' : 'alert-warning'">
+    <i class="fas" [ngClass]="yaCerrado ? 'fa-check-circle' : 'fa-clock'"></i>
+    {{ yaCerrado ? 'El cierre diario ya fue realizado' : 'Cierre diario pendiente' }}
+  </div>
+
+  <!-- Loading state -->
+  <div *ngIf="loading" class="loading-container">
+    <i class="fas fa-spinner fa-spin"></i>
+    Cargando datos del día...
+  </div>
+
+  <!-- Contenido principal -->
+  <div *ngIf="!loading" class="main-content">
+    
+    <!-- Resumen Financiero -->
+    <div class="resumen-card" *ngIf="resumenCaja">
+      <div class="card-header">
+        <h3>📊 Resumen Financiero del Día</h3>
+      </div>
+      <div class="card-body">
+        <div class="resumen-grid">
+          <div class="resumen-item">
+            <label>💵 Total Vendido:</label>
+            <span class="amount positive">{{ formatearMonto(resumenCaja.total_vendido || 0) }}</span>
+          </div>
+          <div class="resumen-item">
+            <label>💰 Total Pagado:</label>
+            <span class="amount negative">{{ formatearMonto(resumenCaja.total_pagado || 0) }}</span>
+          </div>
+          <div class="resumen-item highlight">
+            <label>📈 Ganancia Neta:</label>
+            <span class="amount">{{ formatearMonto(resumenCaja.total_neto || 0) }}</span>
+          </div>
+          <div class="resumen-item">
+            <label>💸 Entradas de Caja:</label>
+            <span class="amount positive">{{ formatearMonto(resumenCaja.movimientos_entrada || 0) }}</span>
+          </div>
+          <div class="resumen-item">
+            <label>💳 Salidas de Caja:</label>
+            <span class="amount negative">{{ formatearMonto(resumenCaja.movimientos_salida || 0) }}</span>
+          </div>
+          <div class="resumen-item final">
+            <label>🏦 Balance Final:</label>
+            <span class="amount balance">{{ formatearMonto(resumenCaja.balance_final || 0) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones Principales -->
+    <div class="actions-grid">
+      <!-- Movimientos de Caja -->
+      <div class="action-card">
+        <h4>💱 Movimientos de Caja</h4>
+        <p>Registrar ingresos y salidas de efectivo</p>
+        <div class="action-buttons">
+          <button 
+            class="btn btn-success" 
+            (click)="abrirModalMovimiento('entrada')"
+            [disabled]="yaCerrado">
+            <i class="fas fa-plus"></i>
+            Ingreso
+          </button>
+          <button 
+            class="btn btn-danger" 
+            (click)="abrirModalMovimiento('salida')"
+            [disabled]="yaCerrado">
+            <i class="fas fa-minus"></i>
+            Salida
+          </button>
+        </div>
+      </div>
+
+      <!-- Reportes de Impresión -->
+      <div class="action-card">
+        <h4>🖨️ Reportes</h4>
+        <p>Imprimir resumen del día y cierre diario</p>
+        <div class="action-buttons">
+          <button 
+            class="btn btn-primary" 
+            (click)="imprimirResumenCaja()"
+            [disabled]="!resumenCaja">
+            <i class="fas fa-print"></i>
+            {{ yaCerrado ? 'Reimprimir Resumen' : 'Imprimir Resumen' }}
+          </button>
+          <button 
+            class="btn btn-info" 
+            (click)="imprimirCierreDiario()"
+            [disabled]="!yaCerrado || !cierreExistente"
+            *ngIf="yaCerrado">
+            <i class="fas fa-file-alt"></i>
+            Reimprimir Cierre
+          </button>
+        </div>
+      </div>
+
+      <!-- Cierre Final -->
+      <div class="action-card cierre-card" 
+           [class.disabled]="yaCerrado">
+        <h4>🔐 Cierre Diario</h4>
+        <p>{{ yaCerrado ? 'Cierre realizado exitosamente' : 'Finalizar el día y cerrar la caja' }}</p>
+        <button 
+          class="btn btn-warning full-width" 
+          (click)="abrirModalCierre()"
+          [disabled]="yaCerrado">
+          <i class="fas fa-lock"></i>
+          {{ yaCerrado ? 'Ya Cerrado' : 'Realizar Cierre' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Sorteos Pendientes de Pago -->
+    <div class="sorteos-card" *ngIf="sorteosPendientesPago.length > 0">
+      <div class="card-header">
+        <h3>🎯 Sorteos Pendientes de Pago</h3>
+        <span class="badge">{{ sorteosPendientesPago.length }}</span>
+      </div>
+      <div class="card-body">
+        <div class="sorteos-grid">
+          <div *ngFor="let sorteo of sorteosPendientesPago" class="sorteo-item">
+            <div class="sorteo-info">
+              <h5>{{ sorteo.sorteo.toUpperCase() }}</h5>
+              <div class="sorteo-details">
+                <span class="numero-ganador">🎯 Número: {{ sorteo.numero_ganador }}</span>
+                <span class="cantidad-comprada">🛒 Comprado: {{ formatearMonto(sorteo.cantidad_comprada_numero_ganador || 0) }}</span>
+                <span class="factor">⚡ Factor: {{ sorteo.factor_multiplicador }}x</span>
+                <div class="calculo-formula">
+                  <span class="formula">{{ formatearMonto(sorteo.cantidad_comprada_numero_ganador || 0) }} × {{ sorteo.factor_multiplicador }} = {{ formatearMonto(sorteo.total_calculado_pagar || sorteo.total_pagado) }}</span>
+                </div>
+              </div>
+            </div>
+            <button 
+              class="btn btn-sm" 
+              [ngClass]="isSorteoPagado(sorteo.id) ? 'btn-secondary' : 'btn-success'"
+              (click)="abrirModalPagoSorteo(sorteo)"
+              [disabled]="yaCerrado || isSorteoPagado(sorteo.id)">
+              <i class="fas" [ngClass]="isSorteoPagado(sorteo.id) ? 'fa-check' : 'fa-hand-holding-usd'"></i>
+              {{ isSorteoPagado(sorteo.id) ? 'Ya Pagado' : 'Pagar Premio' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Movimientos del Día -->
+    <div class="movimientos-card" *ngIf="movimientosDelDia.length > 0">
+      <div class="card-header">
+        <h3>📝 Movimientos del Día</h3>
+        <span class="badge">{{ movimientosDelDia.length }}</span>
+      </div>
+      <div class="card-body">
+        <div class="tabla-responsive">
+          <table class="movimientos-table">
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Tipo</th>
+                <th>Motivo</th>
+                <th>Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let movimiento of movimientosDelDia">
+                <td>{{ movimiento.fecha | date:'HH:mm' }}</td>
+                <td>
+                  <span class="tipo-badge" [ngClass]="getTipoMovimientoClass(movimiento.tipo)">
+                    {{ getTipoMovimientoTexto(movimiento.tipo) }}
+                  </span>
+                </td>
+                <td>{{ movimiento.motivo }}</td>
+                <td [ngClass]="getTipoMovimientoClass(movimiento.tipo)">
+                  {{ movimiento.tipo === 'entrada' ? '+' : '-' }}{{ formatearMonto(movimiento.monto) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Pago de Sorteo -->
+<div class="modal" [style.display]="showPagoSorteoModal ? 'flex' : 'none'" 
+     [class.show]="showPagoSorteoModal" (click)="cerrarModalPagoSorteo()">
+  <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">💰 Pago de Premio de Sorteo</h5>
+        <button type="button" class="close" (click)="cerrarModalPagoSorteo()" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" *ngIf="sorteoParaPago">
+        <div class="pago-sorteo-details">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="info-item">
+                <label>Sorteo:</label>
+                <span>{{ sorteoParaPago.sorteoId }}</span>
+              </div>
+              <div class="info-item">
+                <label>Número Ganador:</label>
+                <span class="numero-grande">{{ sorteoParaPago.numeroGanador }}</span>
+              </div>
+              <div class="info-item">
+                <label>Factor Aplicado:</label>
+                <span>{{ sorteoParaPago.factor }}x</span>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="info-item">
+                <label>Total Vendido:</label>
+                <span>{{ formatearMonto(sorteoParaPago.totalVendido) }}</span>
+              </div>
+              <div class="info-item">
+                <label>Vendido del Número {{ sorteoParaPago.numeroGanador }}:</label>
+                <span class="numero-destacado">{{ formatearMonto(sorteoParaPago.ventaPorNumero) }}</span>
+              </div>
+              <div class="info-item total">
+                <label>Total a Pagar:</label>
+                <span class="monto-pagar">{{ formatearMonto(sorteoParaPago.totalPagar) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="cerrarModalPagoSorteo()">
+          Cancelar
+        </button>
+        <button type="button" class="btn btn-success" (click)="confirmarPagoSorteo()">
+          <i class="fas fa-arrow-right"></i>
+          Continuar con Pago
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmación de Pago -->
+<div class="modal" [style.display]="showConfirmPagoModal ? 'flex' : 'none'" 
+     [class.show]="showConfirmPagoModal" (click)="cerrarModalConfirmPago()">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">✅ Confirmar Pago Realizado</h5>
+        <button type="button" class="close" (click)="cerrarModalConfirmPago()" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="nombreReceptor">Nombre de quien recibe (opcional):</label>
+          <input 
+            type="text" 
+            id="nombreReceptor"
+            class="form-control" 
+            [(ngModel)]="datosConfirmPago.nombreReceptor"
+            (ngModelChange)="onFormValueChange()"
+            placeholder="Ingrese el nombre de quien recibe el premio">
+        </div>
+        <div class="form-group">
+          <label for="montoExacto">Monto pagado:</label>
+          <input 
+            type="number" 
+            id="montoExacto"
+            class="form-control" 
+            [(ngModel)]="datosConfirmPago.montoExacto"
+            (ngModelChange)="onFormValueChange()"
+            step="0.01"
+            readonly>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="cerrarModalConfirmPago()">
+          Cancelar
+        </button>
+        <button 
+          type="button" 
+          class="btn btn-success" 
+          (click)="procesarPagoSorteo()"
+          [disabled]="procesandoPago">
+          <i class="fas fa-spinner fa-spin" *ngIf="procesandoPago"></i>
+          <i class="fas fa-check" *ngIf="!procesandoPago"></i>
+          {{ procesandoPago ? 'Procesando...' : 'Confirmar Pago Realizado' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Movimiento de Caja -->
+<div class="modal" [style.display]="showMovimientoModal ? 'flex' : 'none'" 
+     [class.show]="showMovimientoModal" (click)="cerrarModalMovimiento()">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas" [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'fa-plus text-success' : 'fa-minus text-danger'"></i>
+          {{ nuevoMovimiento.tipo === 'entrada' ? 'Registrar Ingreso de Efectivo' : 'Registrar Salida de Efectivo' }}
+        </h5>
+        <button type="button" class="close" (click)="cerrarModalMovimiento()" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form>
+          <div class="form-group">
+            <label for="motivo">Motivo *:</label>
+            <textarea 
+              id="motivo"
+              class="form-control" 
+              [(ngModel)]="nuevoMovimiento.motivo"
+              (ngModelChange)="onFormValueChange()"
+              name="motivo"
+              rows="3"
+              placeholder="Describa el motivo de este movimiento"
+              required></textarea>
+          </div>
+          <div class="form-group">
+            <label for="monto">Monto *:</label>
+            <div class="input-group">
+              <div class="input-group-prepend">
+                <span class="input-group-text">L</span>
+              </div>
+              <input 
+                type="number" 
+                id="monto"
+                class="form-control" 
+                [(ngModel)]="nuevoMovimiento.monto"
+                (ngModelChange)="onFormValueChange()"
+                name="monto"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="cerrarModalMovimiento()">
+          Cancelar
+        </button>
+        <button 
+          type="button" 
+          class="btn" 
+          [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'btn-success' : 'btn-danger'"
+          (click)="registrarMovimiento()"
+          [disabled]="!puedeRegistrarMovimiento">
+          <i class="fas" [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'fa-plus' : 'fa-minus'"></i>
+          Registrar {{ nuevoMovimiento.tipo === 'entrada' ? 'Ingreso' : 'Salida' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cierre Diario -->
+<div class="modal" [style.display]="showCierreModal ? 'flex' : 'none'" 
+     [class.show]="showCierreModal" (click)="cerrarModalCierre()">
+  <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">🔐 Realizar Cierre Diario</h5>
+        <button type="button" class="close" (click)="cerrarModalCierre()" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" *ngIf="resumenCaja">
+        <div class="cierre-resumen">
+          <h6>Resumen del Día</h6>
+          <div class="resumen-final">
+            <div class="resumen-item">
+              <label>Balance calculado del sistema:</label>
+              <span class="amount">{{ formatearMonto(resumenCaja.balance_final) }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="efectivoReportado">Efectivo reportado en caja *:</label>
+          <div class="input-group">
+            <div class="input-group-prepend">
+              <span class="input-group-text">L</span>
+            </div>
+            <input 
+              type="number" 
+              id="efectivoReportado"
+              class="form-control" 
+              [(ngModel)]="datosCierre.efectivoReportado"
+              (ngModelChange)="onFormValueChange()"
+              step="0.01"
+              placeholder="0.00"
+              required>
+          </div>
+          <small class="form-text text-muted">
+            💡 Puede ingresar valores negativos si el efectivo en caja es menor al calculado
+          </small>
+        </div>
+
+        <div *ngIf="hayDiferencia" class="diferencia-alert">
+          <div class="alert" [ngClass]="diferenciaCaja > 0 ? 'alert-success' : 'alert-danger'">
+            <strong>{{ diferenciaCaja > 0 ? 'Sobrante' : 'Faltante' }}:</strong>
+            {{ formatearMonto(getAbsDiferencia()) }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="notas">Notas adicionales:</label>
+          <textarea 
+            id="notas"
+            class="form-control" 
+            [(ngModel)]="datosCierre.notas"
+            (ngModelChange)="onFormValueChange()"
+            rows="3"
+            placeholder="Observaciones sobre el cierre (opcional)"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="cerrarModalCierre()">
+          Cancelar
+        </button>
+        <button 
+          type="button" 
+          class="btn btn-warning" 
+          (click)="realizarCierreDiario()"
+          [disabled]="!puedeRealizarCierre">
+          <i class="fas fa-spinner fa-spin" *ngIf="loading"></i>
+          <i class="fas fa-lock" *ngIf="!loading"></i>
+          {{ loading ? 'Procesando...' : 'Confirmar Cierre Diario' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

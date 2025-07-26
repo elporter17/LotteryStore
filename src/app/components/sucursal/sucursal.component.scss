@@ -21,6 +21,12 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .btn-header {
   background: #ffffff;
   border: 1px solid #dee2e6;
@@ -31,6 +37,33 @@
   color: #495057;
   border-radius: 6px;
   transition: all 0.2s ease;
+  text-decoration: none;
+
+  &.btn-cierre {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border-color: #28a745;
+    
+    &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #218838 0%, #1abc9c 100%);
+      border-color: #1e7e34;
+      color: white;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+    }
+  }
+
+  &.btn-cerrar {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+    
+    &:hover:not(:disabled) {
+      background: #c82333;
+      border-color: #bd2130;
+      color: white;
+    }
+  }
 }
 
 .btn-header:hover {

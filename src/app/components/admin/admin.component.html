@@ -8,6 +8,12 @@
     </div>
     
     <div class="header-actions">
+      <button class="btn-header btn-cierre-caja" (click)="abrirModalCierreCaja()"
+              [disabled]="showCierreCajaModal">
+        <i class="fas fa-cash-register"></i> 💰 Cierre de Caja
+        <span *ngIf="showCierreCajaModal" style="margin-left: 10px; color: green;">✅</span>
+      </button>
+      
       <button class="btn-header btn-users" (click)="navigateToUsers()" [disabled]="isLoading">
         <i class="fas fa-users"></i> Gestión de Usuarios
       </button>
@@ -673,6 +679,314 @@
       <button class="btn-modal btn-primary" (click)="closeResumenModal()">
         <i class="fas fa-check"></i>
         Entendido
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Sheet de Cierre de Caja por Sucursal -->
+<div class="bottom-sheet-overlay" 
+     [class.show]="showCierreCajaModal" 
+     [hidden]="!showCierreCajaModal"
+     (click)="showCierreCajaModal && $event.target === $event.currentTarget && cerrarModalCierreCaja()">
+  
+  <div class="bottom-sheet-container" [class.show]="showCierreCajaModal">
+    <!-- Handle para arrastrar -->
+    <div class="bottom-sheet-handle">
+      <div class="handle-bar"></div>
+    </div>
+    
+    <!-- Header del Bottom Sheet -->
+    <div class="bottom-sheet-header">
+      <div class="header-content">
+        <h4 class="sheet-title">
+          <i class="fas fa-cash-register"></i>
+          💰 Cierre de Caja
+        </h4>
+        <button type="button" class="btn-close-sheet" (click)="cerrarModalCierreCaja()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Contenido del Bottom Sheet -->
+    <div class="bottom-sheet-body">
+      <!-- Selección de Sucursal y Fecha -->
+      <div class="selection-container">
+        <div class="selection-grid">
+          <div class="selection-item">
+            <label for="sucursalSelector" class="selection-label">
+              <i class="fas fa-store"></i> Sucursal
+            </label>
+            <select id="sucursalSelector" 
+                    class="selection-input" 
+                    [(ngModel)]="selectedSucursalForCierre"
+                    (change)="onSucursalSeleccionada()"
+                    [disabled]="loadingCierreCaja">
+              <option value="">-- Seleccione --</option>
+              <option *ngFor="let sucursal of sucursalesDisponibles" [value]="sucursal">
+                {{ sucursal }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="selection-item">
+            <label for="fechaSelector" class="selection-label">
+              <i class="fas fa-calendar"></i> Fecha
+            </label>
+            <input type="date" 
+                   id="fechaSelector"
+                   class="selection-input" 
+                   [(ngModel)]="fechaCierreSeleccionada"
+                   (change)="onFechaCierreChange()"
+                   [disabled]="loadingCierreCaja">
+          </div>
+        </div>
+      </div>
+
+      <!-- Estado de Carga -->
+      <div *ngIf="loadingCierreCaja" class="loading-section">
+        <div class="loading-content">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span>Cargando datos...</span>
+        </div>
+      </div>
+
+      <!-- Contenido Principal del Cierre de Caja -->
+      <div *ngIf="!loadingCierreCaja && selectedSucursalForCierre && resumenCajaSucursal" class="cierre-content">
+        
+        <!-- Info Header -->
+        <div class="info-header">
+          <div class="date-info">
+            <i class="fas fa-calendar"></i>
+            {{ fechaCierreSeleccionada | date:'dd/MM/yyyy' }}
+          </div>
+          <div class="sucursal-info">
+            <i class="fas fa-store"></i>
+            {{ selectedSucursalForCierre }}
+          </div>
+        </div>
+
+        <!-- Estado del Cierre -->
+        <div class="cierre-status-indicator" 
+             [ngClass]="cierreExistenteSucursal ? 'status-closed' : 'status-open'">
+          <div class="status-content">
+            <i class="fas" [ngClass]="cierreExistenteSucursal ? 'fa-lock' : 'fa-clock'"></i>
+            <span>{{ cierreExistenteSucursal ? 'Cierre ya realizado' : 'Cierre pendiente' }}</span>
+            <span *ngIf="cierreExistenteSucursal" class="status-date">
+              ({{ formatFechaCierre(cierreExistenteSucursal) }})
+            </span>
+          </div>
+        </div>
+
+        <!-- Resumen Financiero Cards -->
+        <div class="financial-summary">
+          <div class="summary-title">
+            <i class="fas fa-chart-line"></i>
+            Resumen del Día
+          </div>
+          
+          <div class="summary-cards">
+            <div class="summary-card vendido">
+              <div class="card-icon">💵</div>
+              <div class="card-content">
+                <div class="card-label">Total Vendido</div>
+                <div class="card-amount positive">{{ formatearMontoSucursal(resumenCajaSucursal.total_vendido || 0) }}</div>
+              </div>
+            </div>
+            
+            <div class="summary-card pagado">
+              <div class="card-icon">💰</div>
+              <div class="card-content">
+                <div class="card-label">Total Pagado</div>
+                <div class="card-amount negative">{{ formatearMontoSucursal(resumenCajaSucursal.total_pagado || 0) }}</div>
+              </div>
+            </div>
+            
+            <div class="summary-card ganancia">
+              <div class="card-icon">📈</div>
+              <div class="card-content">
+                <div class="card-label">Ganancia Neta</div>
+                <div class="card-amount" [class.positive]="(resumenCajaSucursal.total_neto || 0) > 0" [class.negative]="(resumenCajaSucursal.total_neto || 0) < 0">
+                  {{ formatearMontoSucursal(resumenCajaSucursal.total_neto || 0) }}
+                </div>
+              </div>
+            </div>
+            
+            <div class="summary-card balance">
+              <div class="card-icon">🏦</div>
+              <div class="card-content">
+                <div class="card-label">Balance Final</div>
+                <div class="card-amount balance">{{ formatearMontoSucursal(resumenCajaSucursal.balance_final || 0) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sorteos del Día -->
+        <div class="section" *ngIf="sorteosPendientesPagoSucursal.length > 0">
+          <div class="section-header">
+            <h5>
+              <i class="fas fa-dice"></i>
+              Sorteos del Día
+              <span class="badge">{{ sorteosPendientesPagoSucursal.length }}</span>
+            </h5>
+          </div>
+          <div class="pending-list">
+            <div *ngFor="let sorteo of sorteosPendientesPagoSucursal" class="pending-item-detailed">
+              <div class="sorteo-header">
+                <div class="sorteo-name">{{ sorteo.sorteo.toUpperCase() }}</div>
+                <div class="sorteo-status" 
+                     [ngClass]="{
+                       'status-paid': sorteo.ya_pagado,
+                       'status-pending': !sorteo.ya_pagado
+                     }">
+                  <i class="fas" [ngClass]="{
+                    'fa-check-circle': sorteo.ya_pagado,
+                    'fa-exclamation-circle': !sorteo.ya_pagado
+                  }"></i>
+                  {{ sorteo.ya_pagado ? 'Ya Pagado' : 'Pendiente de Pago' }}
+                </div>
+              </div>
+              
+              <div class="sorteo-calculation">
+                <div class="calculation-row">
+                  <div class="calc-item">
+                    <div class="calc-label">
+                      <i class="fas fa-trophy"></i>
+                      Número Ganador
+                    </div>
+                    <div class="calc-value winning-number">
+                      #{{ sorteo.numero_ganador }}
+                    </div>
+                  </div>
+                  
+                  <div class="calc-item">
+                    <div class="calc-label">
+                      <i class="fas fa-shopping-cart"></i>
+                      Cantidad Comprada
+                    </div>
+                    <div class="calc-value">
+                      L {{ sorteo.cantidad_comprada_numero_ganador?.toFixed(2) || '0.00' }}
+                    </div>
+                  </div>
+                  
+                  <div class="calc-item">
+                    <div class="calc-label">
+                      <i class="fas fa-times"></i>
+                      Factor
+                    </div>
+                    <div class="calc-value factor">
+                      {{ sorteo.factor_multiplicador }}x
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="calculation-formula">
+                  <div class="formula-display">
+                    <span class="formula-part">L {{ sorteo.cantidad_comprada_numero_ganador?.toFixed(2) || '0.00' }}</span>
+                    <span class="formula-operator">×</span>
+                    <span class="formula-part">{{ sorteo.factor_multiplicador }}</span>
+                    <span class="formula-operator">=</span>
+                    <span class="formula-result">L {{ sorteo.total_calculado_pagar?.toFixed(2) || '0.00' }}</span>
+                  </div>
+                  <div class="formula-label">Total a Pagar</div>
+                </div>
+                
+                <!-- Verificación de cálculo -->
+                <div class="calculation-verification">
+                  <div class="verification-success" 
+                       *ngIf="sorteo.calculo_detalle?.coincide">
+                    <i class="fas fa-check-circle"></i>
+                    <span>✅ Cálculo correcto: L {{ sorteo.total_calculado_pagar?.toFixed(2) || '0.00' }}</span>
+                  </div>
+                  
+                  <div class="verification-warning" 
+                       *ngIf="!sorteo.calculo_detalle?.coincide">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div class="warning-content">
+                      <div class="warning-title">⚠️ Diferencia encontrada</div>
+                      <div class="warning-details">
+                        <span>Calculado: L {{ sorteo.total_calculado_pagar?.toFixed(2) || '0.00' }}</span>
+                        <span>Original: L {{ sorteo.total_pagado?.toFixed(2) || '0.00' }}</span>
+                        <span class="difference">Diferencia: L {{ sorteo.calculo_detalle?.diferencia?.toFixed(2) || '0.00' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Movimientos del Día -->
+        <div class="section" *ngIf="movimientosCajaSucursal.length > 0">
+          <div class="section-header">
+            <h5>
+              <i class="fas fa-exchange-alt"></i>
+              Movimientos del Día
+              <span class="badge">{{ movimientosCajaSucursal.length }}</span>
+            </h5>
+          </div>
+          <div class="movements-list">
+            <div *ngFor="let movimiento of movimientosCajaSucursal" class="movement-item">
+              <div class="movement-time">
+                {{ movimiento.fecha | date:'HH:mm' }}
+              </div>
+              <div class="movement-info">
+                <div class="movement-type" [ngClass]="getTipoMovimientoClassSucursal(movimiento.tipo)">
+                  {{ getTipoMovimientoTextoSucursal(movimiento.tipo) }}
+                </div>
+                <div class="movement-reason">{{ movimiento.motivo }}</div>
+              </div>
+              <div class="movement-amount" [ngClass]="getTipoMovimientoClassSucursal(movimiento.tipo)">
+                {{ movimiento.tipo === 'entrada' ? '+' : '-' }}{{ formatearMontoSucursal(movimiento.monto) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mensajes informativos -->
+        <div *ngIf="movimientosCajaSucursal.length === 0" class="info-message">
+          <i class="fas fa-info-circle"></i>
+          No hay movimientos registrados para hoy.
+        </div>
+
+        <div *ngIf="sorteosPendientesPagoSucursal.length === 0" class="info-message">
+          <i class="fas fa-info-circle"></i>
+          No hay sorteos con premios para mostrar.
+        </div>
+
+      </div>
+
+      <!-- Mensaje de selección -->
+      <div *ngIf="!selectedSucursalForCierre && !loadingCierreCaja" class="empty-state">
+        <div class="empty-icon">
+          <i class="fas fa-store"></i>
+        </div>
+        <h5>Seleccione una sucursal</h5>
+        <p>Elija una sucursal para ver su cierre de caja</p>
+      </div>
+
+    </div>
+    
+    <!-- Footer del Bottom Sheet -->
+    <div class="bottom-sheet-footer" *ngIf="resumenCajaSucursal">
+      <button class="btn-sheet btn-secondary" (click)="cerrarModalCierreCaja()">
+        <i class="fas fa-times"></i>
+        Cerrar
+      </button>
+      <button class="btn-sheet btn-primary" (click)="imprimirResumenCajaSucursal()">
+        <i class="fas fa-print"></i>
+        {{ cierreExistenteSucursal ? 'Reimprimir Resumen' : 'Imprimir Resumen' }}
+      </button>
+      <button 
+        class="btn-sheet btn-info" 
+        (click)="imprimirCierreDiarioSucursal()"
+        [disabled]="!cierreExistenteSucursal"
+        *ngIf="cierreExistenteSucursal">
+        <i class="fas fa-file-alt"></i>
+        Reimprimir Cierre
       </button>
     </div>
   </div>

@@ -11,9 +11,15 @@
       <h2>{{ currentUser?.sucursal || 'Sucursal 1' }}</h2>
     </div>
     
-    <button class="btn-header btn-cerrar" (click)="logout()" [disabled]="isLoading">
-      Cerrar Sesión
-    </button>
+    <div class="header-actions">
+      <button class="btn-header btn-cierre" routerLink="/cierre-caja" [disabled]="isLoading">
+        💰 Cierre de Caja
+      </button>
+      
+      <button class="btn-header btn-cerrar" (click)="logout()" [disabled]="isLoading">
+        Cerrar Sesión
+      </button>
+    </div>
   </div>
 
   <!-- Contenido Principal -->

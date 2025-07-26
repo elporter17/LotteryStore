@@ -420,4 +420,78 @@ export class PrintService {
     }
   }
 
+  // Función para imprimir contenido HTML (requerida por el componente de cierre de caja)
+  async printContent(htmlContent: string): Promise<void> {
+    try {
+      // Crear una ventana de impresión
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      
+      if (!printWindow) {
+        throw new Error('No se pudo abrir la ventana de impresión. Verifique que no esté bloqueada por el navegador.');
+      }
+
+      // Escribir el contenido HTML
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Reporte de Caja</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 0;
+              padding: 20px;
+              background: white;
+            }
+            @media print {
+              body { margin: 0; padding: 10px; }
+              .no-print { display: none; }
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 10px 0;
+            }
+            td, th {
+              padding: 8px;
+              text-align: left;
+              border-bottom: 1px solid #ddd;
+            }
+            th {
+              background-color: #f2f2f2;
+              font-weight: bold;
+            }
+            .text-center { text-align: center; }
+            .text-end { text-align: right; }
+            h2, h3 { margin: 15px 0 10px 0; color: #333; }
+            p { margin: 5px 0; }
+            .header { border-bottom: 2px solid #333; margin-bottom: 20px; }
+          </style>
+        </head>
+        <body>
+          ${htmlContent}
+          <div class="no-print" style="margin-top: 20px; text-align: center;">
+            <button onclick="window.print()">Imprimir</button>
+            <button onclick="window.close()">Cerrar</button>
+          </div>
+        </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+
+      // Enfocar la ventana e imprimir automáticamente
+      printWindow.focus();
+      
+      // Pequeño delay para asegurar que el contenido se cargue
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+
+    } catch (error) {
+      console.error('Error al imprimir:', error);
+      throw error;
+    }
+  }
+
 }
