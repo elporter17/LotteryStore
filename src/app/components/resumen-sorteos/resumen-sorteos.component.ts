@@ -40,7 +40,7 @@ export class ResumenSorteosComponent implements OnInit, OnDestroy {
   async loadResumenesSorteos(): Promise<void> {
     this.isLoading = true;
     const hondurasToday = this.supabaseService.getHondurasDateTime();
-    const fechaStr = hondurasToday.toISOString().split('T')[0];
+    const fechaStr = this.supabaseService.formatDateOnlyForSupabase(hondurasToday);
 
     try {
       for (const sorteo of this.sorteos) {

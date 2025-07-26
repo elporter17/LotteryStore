@@ -539,6 +539,7 @@ export class SupabaseService {
         .eq('id', sorteoId)
         .order('sucursal');
 
+        console.log(`Obteniendo resumen por sucursal para sorteo: ${sorteoId}`, data, error);
       if (error) {
         console.error('Error al obtener resumen por sucursal:', error);
         return [];
