@@ -246,8 +246,8 @@ export class PrintService {
       doc.setTextColor(255, 255, 255); // Texto blanco
       doc.setFontSize(24);
       doc.setFont('helvetica', 'bold');
-      doc.text('SISTEMA DE LOTERÍA', 105, 20, { align: 'center' });
-      
+      doc.text('SISTEMA DE VENTA', 105, 20, { align: 'center' });
+
       doc.setFontSize(14);
       doc.setFont('helvetica', 'normal');
       doc.text('REPORTE DE VENTAS', 105, 28, { align: 'center' });

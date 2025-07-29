@@ -2283,7 +2283,7 @@ export class AdminComponent implements OnInit {
           <p><strong>DOCUMENTO OFICIAL</strong></p>
           <p>Reimpreso: ${new Date().toLocaleString('es-HN')}</p>
           <hr style="border: 1px solid #333;">
-          <p>Sistema de Lotería - Admin</p>
+          <p>Sistema de Venta - Admin</p>
         </div>
       </div>
     `;

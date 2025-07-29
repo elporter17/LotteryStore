@@ -8,7 +8,7 @@ import { Router } from '@angular/router';
   template: `
     <div class="container">
       <div class="card" style="max-width: 400px; margin: 100px auto;">
-        <h2 class="text-center mb-3">Sistema de Lotería</h2>
+        <h2 class="text-center mb-3">Sistema de Venta</h2>
         <form (ngSubmit)="onLogin()" #loginForm="ngForm">
           <div class="form-group">
             <label for="email">Email:</label>

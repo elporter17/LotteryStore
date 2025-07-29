@@ -85,7 +85,7 @@ export class ExportService {
 
       // ===== HOJA 1: RESUMEN GENERAL =====
       const resumenData = [
-        ['REPORTE DIARIO - SISTEMA DE LOTERÍA'],
+        ['REPORTE DIARIO - SISTEMA DE VENTA'],
         ['Fecha:', data.resumenGeneral.fechaReporte],
         ['Hora:', data.resumenGeneral.horaReporte],
         ['Filtros Aplicados:', data.resumenGeneral.filtroAplicado],
@@ -230,7 +230,7 @@ export class ExportService {
 
       // ===== HOJA 1: DASHBOARD PRINCIPAL =====
       const dashboardData = [
-        ['REPORTE ADMINISTRADOR - SISTEMA DE LOTERÍA'],
+        ['REPORTE ADMINISTRADOR - SISTEMA DE VENTA'],
         ['Fecha:', data.fechaReporte],
         ['Hora:', data.horaReporte],
         ['Filtros Aplicados:', data.filtroAplicado],
@@ -370,7 +370,7 @@ export class ExportService {
       // ===== ENCABEZADO PRINCIPAL =====
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text('REPORTE DIARIO - SISTEMA DE LOTERÍA', 20, yPosition);
+      doc.text('REPORTE DIARIO - SISTEMA DE VENTA', 20, yPosition);
       yPosition += 15;
 
       doc.setFontSize(12);
@@ -641,7 +641,7 @@ export class ExportService {
       // ENCABEZADO PRINCIPAL (como en la imagen)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(18);
-      doc.text('REPORTE ADMINISTRADOR - SISTEMA DE LOTERÍA', 20, 25);
+      doc.text('REPORTE ADMINISTRADOR - SISTEMA DE VENTA', 20, 25);
       
       // Información de fecha y hora (como en la imagen)
       doc.setFont('helvetica', 'normal');
