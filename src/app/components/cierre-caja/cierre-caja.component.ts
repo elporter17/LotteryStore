@@ -24,11 +24,19 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     cierreExistente: CierreDiario | null = null;
     yaCerrado = false;
 
+    sucursalesDisponibles: string[] = [];
+
+
     // Datos del resumen
     resumenCaja: any = null;
     sorteosPendientesPago: any[] = [];
     sorteosPagados: string[] = []; // Array para llevar control de sorteos ya pagados
     movimientosDelDia: MovimientoCaja[] = [];
+
+    selectedSucursalForCierre: string = '';
+    users: any[] = [];
+
+
 
     // Modal states
     showPagoSorteoModal = false;
@@ -59,13 +67,14 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     procesandoPago = false;
 
     private subscriptions: Subscription[] = [];
+    sucursalesInfo: any[] = []; // Información de sucursales para mostrar en el modal
 
     constructor(
         private supabaseService: SupabaseService,
         private notificationService: NotificationService,
         private printService: PrintService,
         private cdr: ChangeDetectorRef
-        
+
     ) { }
 
     async ngOnInit(): Promise<void> {
@@ -73,12 +82,14 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             this.loading = true;
             this.currentUser = await this.supabaseService.getCurrentUser();
 
-            if (!this.currentUser || this.currentUser.role !== 'sucursal') {
-                this.notificationService.showError('Acceso denegado. Solo usuarios de sucursal pueden acceder.');
+            if (!this.currentUser || this.currentUser.role !== 'admin') {
+                this.notificationService.showError('Acceso denegado. Solo usuarios administradores pueden acceder.');
                 return;
             }
 
-            await this.cargarDatosDelDia();
+            await this.cargarSucursalesDisponibles();
+
+            await this.cargarDatosDelDia('');
         } catch (error) {
             console.error('Error al inicializar cierre de caja:', error);
             this.notificationService.showError('Error al cargar los datos del día');
@@ -91,33 +102,81 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         this.subscriptions.forEach(sub => sub.unsubscribe());
     }
 
-    private async cargarDatosDelDia(): Promise<void> {
-        if (!this.currentUser?.sucursal) return;
+
+    private async cargarSucursalesDisponibles(): Promise<void> {
+        try {
+            const now = new Date();
+
+
+            let usuarios = this.users;
+            if (!usuarios?.length) {
+                usuarios = await this.supabaseService.getAllUsers();
+                this.users = usuarios; // opcional: cache usuarios obtenidos
+            }
+
+            const sucursalesSet = new Set<string>();
+
+            for (const user of usuarios) {
+                if (user.active && user.role === 'sucursal' && user.sucursal) {
+                    sucursalesSet.add(user.sucursal);
+                    this.sucursalesInfo.push(user);
+
+                }
+            }
+
+            this.sucursalesDisponibles = Array.from(sucursalesSet).sort();
+            console.log(this.sucursalesInfo)
+
+            console.log('Sucursales cargadas y cacheadas:', this.sucursalesDisponibles);
+        } catch (error) {
+            console.error('Error al cargar sucursales:', error);
+            this.sucursalesDisponibles = [];
+        }
+    }
+    async onSucursalSeleccionada(): Promise<void> {
+        if (!this.selectedSucursalForCierre) return;
+
+        this.cdr.detectChanges();
+
+        setTimeout(async () => {
+            try {
+                await this.cargarDatosDelDia(this.selectedSucursalForCierre);
+            } catch (error) {
+                console.error('Error al cargar datos de cierre de caja:', error);
+                this.notificationService.showError('Error al cargar los datos de la sucursal');
+            } finally {
+                this.cdr.detectChanges();
+            }
+        }, 0);
+    }
+
+    private async cargarDatosDelDia(sucursal: string): Promise<void> {
+
+        if (!sucursal && sucursal == '') return;
 
         try {
             // Verificar si ya existe un cierre para hoy
             this.cierreExistente = await this.supabaseService.obtenerCierreDiario(
                 this.fechaHoy,
-                this.currentUser.sucursal
+                sucursal
             );
             this.yaCerrado = !!this.cierreExistente;
 
             // Cargar resumen de caja
             this.resumenCaja = await this.supabaseService.calcularResumenCajaDiario(
                 this.fechaHoy,
-                this.currentUser.sucursal
+                sucursal
             );
+            console.log(this.resumenCaja)
 
             // Cargar sorteos pendientes de pago
             this.sorteosPendientesPago = await this.supabaseService.obtenerSorteosPendientesPago(
-                this.fechaHoy,
-                this.currentUser.sucursal
+                sucursal
             );
 
             // Cargar movimientos del día
             this.movimientosDelDia = await this.supabaseService.obtenerMovimientosCaja(
-                this.fechaHoy,
-                this.currentUser.sucursal
+                sucursal
             );
 
             // Identificar sorteos ya pagados basándose en los movimientos
@@ -138,12 +197,13 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         try {
             // Obtener venta específica del número ganador
             let ventaPorNumero = 0;
-            if (sorteo.numero_ganador && this.currentUser?.sucursal) {
+            if (sorteo.numero_ganador && this.selectedSucursalForCierre) {
                 const resumenSorteo = await this.supabaseService.obtenerResumenSorteo(
                     this.fechaHoy,
-                    this.currentUser.sucursal,
+                    this.selectedSucursalForCierre,
                     sorteo.sorteo
                 );
+                console.log('Resumen del sorteo:', resumenSorteo);
                 ventaPorNumero = resumenSorteo?.ventaPorNumero || 0;
             }
 
@@ -155,10 +215,15 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
                 totalVendido: sorteo.total_vendido,
                 totalPagar: sorteo.total_pagado,
                 totalNeto: sorteo.ganancia_neta,
-                sucursal: this.currentUser!.sucursal!
+                sucursal: this.selectedSucursalForCierre
             };
+            console.log('Sorteo para pago:', this.sorteoParaPago);
             this.showPagoSorteoModal = true;
-            this.cdr.markForCheck(); // Usar markForCheck en lugar de detectChanges
+            this.cdr.markForCheck(); // Usar markForCheck
+
+            setTimeout(() => {
+                this.updateButtonValidation();
+            }, 100);
         } catch (error) {
             console.error('Error al cargar datos del sorteo:', error);
             this.notificationService.showError('Error al cargar información del sorteo');
@@ -172,12 +237,12 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         this.datosConfirmPago.montoExacto = this.sorteoParaPago.totalPagar;
         this.showPagoSorteoModal = false;
         this.showConfirmPagoModal = true;
-        
+
         console.log('Datos confirm pago:', this.datosConfirmPago);
         console.log('Modal confirm pago abierto:', this.showConfirmPagoModal);
-        
+
         this.cdr.markForCheck(); // Usar markForCheck
-        
+
         // Forzar actualización después de un breve momento
         setTimeout(() => {
             this.updateButtonValidation();
@@ -188,9 +253,9 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     get puedeConfirmarPago(): boolean {
         const montoValido = !!(this.datosConfirmPago.montoExacto && this.datosConfirmPago.montoExacto > 0);
         const noProcesando = !this.procesandoPago;
-        
+
         const result = montoValido && noProcesando;
-        
+
         console.log('Validación pago sorteo:', {
             montoExacto: this.datosConfirmPago.montoExacto,
             montoValido,
@@ -198,7 +263,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             noProcesando,
             resultado: result
         });
-        
+
         return result;
     }
 
@@ -216,7 +281,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
                 usuarioId: this.currentUser.id,
                 sorteoId: this.sorteoParaPago.sorteoId,
                 fecha: new Date(),
-                sucursal: this.currentUser.sucursal!,
+                sucursal: this.selectedSucursalForCierre,
                 nombreReceptor: this.datosConfirmPago.nombreReceptor || undefined
             };
 
@@ -231,7 +296,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
             // Limpiar y recargar
             this.cerrarModalConfirmPago();
-            await this.cargarDatosDelDia();
+            await this.cargarDatosDelDia(this.selectedSucursalForCierre);
 
         } catch (error) {
             console.error('Error al procesar pago:', error);
@@ -247,7 +312,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         console.log('Estado del modal:', this.showPagoSorteoModal);
         this.showPagoSorteoModal = false;
         this.sorteoParaPago = null;
-         this.cdr.detectChanges();
+        this.cdr.detectChanges();
         console.log('Modal cerrado, estado:', this.showPagoSorteoModal);
     }
 
@@ -271,12 +336,12 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         };
         this.showMovimientoModal = true;
         this.cdr.markForCheck(); // Usar markForCheck
-        
+
         // Forzar actualización después de un breve momento
         setTimeout(() => {
             this.updateButtonValidation();
         }, 100);
-        
+
         console.log('Modal state:', this.showMovimientoModal);
         console.log('Nuevo movimiento:', this.nuevoMovimiento);
     }
@@ -298,13 +363,13 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
         const result = motivoValido && montoValido;
 
-        console.log('Validación movimiento mejorada:', {
-            motivo: motivo,
-            monto: monto,
-            motivoValido,
-            montoValido,
-            resultado: result
-        });
+        // console.log('Validación movimiento mejorada:', {
+        //     motivo: motivo,
+        //     monto: monto,
+        //     motivoValido,
+        //     montoValido,
+        //     resultado: result
+        // });
 
         return result;
     }
@@ -321,7 +386,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
                 ...this.nuevoMovimiento,
                 usuarioId: this.currentUser.id,
                 fecha: new Date(),
-                sucursal: this.currentUser.sucursal!
+                sucursal: this.selectedSucursalForCierre
             };
 
             await this.supabaseService.registrarMovimientoCaja(movimiento);
@@ -331,7 +396,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             );
 
             this.cerrarModalMovimiento();
-            await this.cargarDatosDelDia();
+            await this.cargarDatosDelDia(this.selectedSucursalForCierre);
 
         } catch (error) {
             console.error('Error al registrar movimiento:', error);
@@ -370,7 +435,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
         // El efectivo reportado debe coincidir exactamente con el balance final del resumen
         this.datosCierre.efectivoReportado = this.resumenCaja.balance_final || 0;
-        
+
         console.log('Valores sincronizados del resumen al cierre:', {
             totalVendido: this.resumenCaja.total_vendido,
             totalPagado: this.resumenCaja.total_pagado,
@@ -384,7 +449,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
     // Getter para validar cierre diario
     get puedeRealizarCierre(): boolean {
-        return !!(this.datosCierre.efectivoReportado !== undefined && 
+        return !!(this.datosCierre.efectivoReportado !== undefined &&
             this.datosCierre.efectivoReportado !== null &&
             !isNaN(this.datosCierre.efectivoReportado) &&
             !this.loading);
@@ -399,24 +464,30 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             const diferencia = this.datosCierre.efectivoReportado - this.resumenCaja.balance_final;
 
             // Obtener resúmenes de sorteos
-            const sorteosMañana = await this.obtenerResumenSorteo('mañana');
-            const sorteosTarde = await this.obtenerResumenSorteo('tarde');
-            const sorteosNoche = await this.obtenerResumenSorteo('noche');
+            const sorteosMañana = await this.supabaseService.calcularResumenCajaDiarioxSorteo(this.selectedSucursalForCierre);
+  
+            console.log('Resumen de sorteos para mañana:', sorteosMañana);
+            // Cargar resumen de caja
+            // this.resumenCaja = await this.supabaseService.calcularResumenCajaDiario(
+            //     this.fechaHoy,
+            //     sucursal
+            // );
+            // console.log(this.resumenCaja)
 
+
+            var idsucursal = this.sucursalesInfo.find(user => user.sucursal === this.selectedSucursalForCierre)?.id || '';
             // Usar exactamente los mismos valores del resumen para garantizar consistencia
             const cierre: Partial<CierreDiario> = {
-                fecha: this.fechaHoy,
-                usuarioId: this.currentUser.id,
-                sucursal: this.currentUser.sucursal!,
+                fecha: new Date(),
+                usuarioId: idsucursal , //d05be528-ce73-49c4-b6fa-785bbdc5cffc
+                sucursal: this.selectedSucursalForCierre,
                 totalVendido: this.resumenCaja.total_vendido,
                 totalPagado: this.resumenCaja.total_pagado,
                 neto: this.resumenCaja.total_neto,
                 efectivoReportado: this.datosCierre.efectivoReportado,
                 diferencia,
                 notas: this.datosCierre.notas,
-                sorteosMañana,
-                sorteosTarde,
-                sorteosNoche
+                sorteosMañana
             };
 
             console.log('Datos del cierre a registrar:', cierre);
@@ -426,7 +497,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             this.notificationService.showSuccess('Cierre diario registrado exitosamente');
 
             this.cerrarModalCierre();
-            await this.cargarDatosDelDia();
+            await this.cargarDatosDelDia(this.selectedSucursalForCierre);
 
         } catch (error) {
             console.error('Error al realizar cierre:', error);
@@ -438,12 +509,12 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     }
 
     private async obtenerResumenSorteo(sorteo: string): Promise<SorteoResumen | undefined> {
-        if (!this.currentUser?.sucursal) return undefined;
+        if (!this.selectedSucursalForCierre) return undefined;
 
         try {
             const resumen = await this.supabaseService.obtenerResumenSorteo(
                 this.fechaHoy,
-                this.currentUser.sucursal,
+                this.selectedSucursalForCierre,
                 sorteo
             );
             return resumen;
@@ -496,7 +567,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     // Método para generar contenido del resumen del día (antes del cierre)
     private generarContenidoResumenDia(): string {
         const fecha = this.fechaHoy.toLocaleDateString('es-HN');
-        const sucursal = this.currentUser?.sucursal || '';
+        const sucursal = this.selectedSucursalForCierre || '';
 
         let contenido = `
       <div style="font-family: monospace; max-width: 300px; margin: 0 auto;">
@@ -558,7 +629,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     // Método para generar contenido del cierre diario (después del cierre)
     private generarContenidoCierreDiario(): string {
         const fecha = this.fechaHoy.toLocaleDateString('es-HN');
-        const sucursal = this.currentUser?.sucursal || '';
+        const sucursal = this.selectedSucursalForCierre || '';
         const cierre = this.cierreExistente!;
 
         let contenido = `
@@ -653,12 +724,12 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         return contenido;
     }
 
-     private generarContenidoCierreDiarioSucursal(): string {
-      const fecha = this.fechaHoy.toLocaleDateString('es-HN');
-        const sucursal = this.currentUser?.sucursal || '';
+    private generarContenidoCierreDiarioSucursal(): string {
+        const fecha = this.fechaHoy.toLocaleDateString('es-HN');
+        const sucursal = this.selectedSucursalForCierre || '';
         const cierre = this.cierreExistente!;
 
-    let contenido = `
+        let contenido = `
       <div style="font-family: monospace; max-width: 300px; margin: 0 auto;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h2>🔒 CIERRE DIARIO OFICIAL</h2>
@@ -685,16 +756,16 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         </div>
     `;
 
-    // Agregar resúmenes de sorteos si existen
-    if (cierre.sorteosMañana || cierre.sorteosTarde || cierre.sorteosNoche || cierre.sorteosMañana || cierre.sorteosTarde || cierre.sorteosNoche) {
-      contenido += `
+        // Agregar resúmenes de sorteos si existen
+        if (cierre.sorteosMañana || cierre.sorteosTarde || cierre.sorteosNoche || cierre.sorteosMañana || cierre.sorteosTarde || cierre.sorteosNoche) {
+            contenido += `
         <div style="border-bottom: 2px solid #333; margin: 15px 0; padding-bottom: 10px;">
           <h3>🎰 RESUMEN DE SORTEOS</h3>
       `;
 
-      const sorteoManana = cierre.sorteosMañana || cierre.sorteosMañana;
-      if (sorteoManana) {
-        contenido += `
+            const sorteoManana = cierre.sorteosMañana || cierre.sorteosMañana;
+            if (sorteoManana) {
+                contenido += `
           <p style="margin: 5px 0;">
             <strong>MAÑANA:</strong><br>
             Ganador: ${sorteoManana.numeroGanador || sorteoManana.numeroGanador || 'N/A'}<br>
@@ -702,11 +773,11 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             Pagado: L ${(sorteoManana.totalPagado || sorteoManana.totalPagado)?.toFixed(2) || '0.00'}
           </p>
         `;
-      }
+            }
 
-      const sorteoTarde = cierre.sorteosTarde || cierre.sorteosTarde;
-      if (sorteoTarde) {
-        contenido += `
+            const sorteoTarde = cierre.sorteosTarde || cierre.sorteosTarde;
+            if (sorteoTarde) {
+                contenido += `
           <p style="margin: 5px 0;">
             <strong>TARDE:</strong><br>
             Ganador: ${sorteoTarde.numeroGanador || sorteoTarde.numeroGanador || 'N/A'}<br>
@@ -714,11 +785,11 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             Pagado: L ${(sorteoTarde.totalPagado || sorteoTarde.totalPagado)?.toFixed(2) || '0.00'}
           </p>
         `;
-      }
+            }
 
-      const sorteoNoche = cierre.sorteosNoche || cierre.sorteosNoche;
-      if (sorteoNoche) {
-        contenido += `
+            const sorteoNoche = cierre.sorteosNoche || cierre.sorteosNoche;
+            if (sorteoNoche) {
+                contenido += `
           <p style="margin: 5px 0;">
             <strong>NOCHE:</strong><br>
             Ganador: ${sorteoNoche.numeroGanador || sorteoNoche.numeroGanador || 'N/A'}<br>
@@ -726,44 +797,44 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             Pagado: L ${(sorteoNoche.totalPagado || sorteoNoche.totalPagado)?.toFixed(2) || '0.00'}
           </p>
         `;
-      }
+            }
 
-      contenido += `</div>`;
-    }
+            contenido += `</div>`;
+        }
 
-    // Agregar movimientos del día si existen
-    if (this.movimientosDelDia.length > 0) {
-      contenido += `
+        // Agregar movimientos del día si existen
+        if (this.movimientosDelDia.length > 0) {
+            contenido += `
         <div style="border-bottom: 2px solid #333; margin: 15px 0; padding-bottom: 10px;">
           <h3>💸 MOVIMIENTOS DE CAJA</h3>
       `;
 
-      this.movimientosDelDia.forEach(mov => {
-        const tipo = mov.tipo === 'entrada' ? 'ENTRADA' : 'SALIDA';
-        const signo = mov.tipo === 'entrada' ? '+' : '-';
-        contenido += `
+            this.movimientosDelDia.forEach(mov => {
+                const tipo = mov.tipo === 'entrada' ? 'ENTRADA' : 'SALIDA';
+                const signo = mov.tipo === 'entrada' ? '+' : '-';
+                contenido += `
           <p style="margin: 5px 0; font-size: 12px;">
             <strong>${tipo}:</strong> ${signo}L ${mov.monto.toFixed(2)}<br>
             ${mov.motivo}<br>
             <small>${new Date(mov.fecha).toLocaleTimeString('es-HN')}</small>
           </p>
         `;
-      });
+            });
 
-      contenido += `</div>`;
-    }
+            contenido += `</div>`;
+        }
 
-    // Agregar notas si existen
-    if (cierre.notas && cierre.notas.trim() !== '') {
-      contenido += `
+        // Agregar notas si existen
+        if (cierre.notas && cierre.notas.trim() !== '') {
+            contenido += `
         <div style="border-bottom: 2px solid #333; margin: 15px 0; padding-bottom: 10px;">
           <h3>📝 OBSERVACIONES</h3>
           <p style="font-style: italic;">${cierre.notas}</p>
         </div>
       `;
-    }
+        }
 
-    contenido += `
+        contenido += `
         <div style="text-align: center; margin-top: 20px; font-size: 12px; border-top: 2px solid #333; padding-top: 10px;">
           <p><strong>🔒 CIERRE OFICIAL</strong></p>
           <p><strong>DOCUMENTO OFICIAL</strong></p>
@@ -774,8 +845,8 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
       </div>
     `;
 
-    return contenido;
-  }
+        return contenido;
+    }
 
     // Método heredado para compatibilidad (genera contenido básico)
     private generarContenidoReporte(): string {
@@ -787,20 +858,20 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     // Método para identificar sorteos ya pagados basándose en los movimientos del día
     private identificarSorteosPagados(): void {
         this.sorteosPagados = [];
-        
+
         // Buscar movimientos de tipo 'salida' que contengan 'Pago premio sorteo' en el motivo
         this.movimientosDelDia.forEach(movimiento => {
-            if (movimiento.tipo === 'salida' && 
-                movimiento.motivo && 
+            if (movimiento.tipo === 'salida' &&
+                movimiento.motivo &&
                 movimiento.motivo.includes('Pago premio sorteo') &&
                 movimiento.sorteoId) {
-                
+
                 if (!this.sorteosPagados.includes(movimiento.sorteoId)) {
                     this.sorteosPagados.push(movimiento.sorteoId);
                 }
             }
         });
-        
+
         console.log('Sorteos identificados como pagados:', this.sorteosPagados);
     }
 
@@ -865,37 +936,4 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         }, 10);
     }
 
-    // Método para debugging del estado de los modales
-    logModalState(): void {
-        console.log('Estado actual de modales:', {
-            showPagoSorteoModal: this.showPagoSorteoModal,
-            showMovimientoModal: this.showMovimientoModal,
-            showCierreModal: this.showCierreModal,
-            showConfirmPagoModal: this.showConfirmPagoModal,
-            puedeRegistrarMovimiento: this.puedeRegistrarMovimiento,
-            puedeConfirmarPago: this.puedeConfirmarPago,
-            puedeRealizarCierre: this.puedeRealizarCierre,
-            nuevoMovimiento: this.nuevoMovimiento,
-            datosConfirmPago: this.datosConfirmPago,
-            datosCierre: this.datosCierre
-        });
-    }
-
-    // Método para debugging específico de formularios
-    debugFormularios(): void {
-        console.log('=== DEBUG FORMULARIOS ===');
-        console.log('Nuevo Movimiento:', this.nuevoMovimiento);
-        console.log('Puede Registrar:', this.puedeRegistrarMovimiento);
-        console.log('Datos Confirm Pago:', this.datosConfirmPago);
-        console.log('Puede Confirmar Pago:', this.puedeConfirmarPago);
-        console.log('Datos Cierre:', this.datosCierre);
-        console.log('Puede Realizar Cierre:', this.puedeRealizarCierre);
-        console.log('=== SORTEOS PAGADOS ===');
-        console.log('Sorteos Pagados:', this.sorteosPagados);
-        console.log('Sorteos Pendientes:', this.sorteosPendientesPago);
-        this.sorteosPendientesPago.forEach(sorteo => {
-            console.log(`Sorteo ${sorteo.id} (${sorteo.sorteo}): ${this.isSorteoPagado(sorteo.id) ? 'PAGADO' : 'PENDIENTE'}`);
-        });
-        console.log('========================');
-    }
 }

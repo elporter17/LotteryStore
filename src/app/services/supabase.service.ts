@@ -531,6 +531,25 @@ export class SupabaseService {
   }
 
   // Nuevo método para obtener resumen de todas las sucursales de un sorteo
+  async getSorteosRealizados(): Promise<any[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('vista_sorteos_fecha_limpia')
+        .select('fecha_limpia')
+        .order('fecha_limpia', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+
+      const ultimosSorteos = data.map(row => row.fecha_limpia);
+      console.log('Últimos sorteos obtenidos:', ultimosSorteos);
+      return ultimosSorteos;
+
+    } catch (error) {
+      console.error('Error al obtener resumen por sucursal:', error);
+      return [];
+    }
+  }
   async getSorteoResumenPorSucursal(sorteoId: string): Promise<any[]> {
     try {
       const { data, error } = await this.supabase
@@ -539,7 +558,7 @@ export class SupabaseService {
         .eq('id', sorteoId)
         .order('sucursal');
 
-        console.log(`Obteniendo resumen por sucursal para sorteo: ${sorteoId}`, data, error);
+      console.log(`Obteniendo resumen por sucursal para sorteo: ${sorteoId}`, data, error);
       if (error) {
         console.error('Error al obtener resumen por sucursal:', error);
         return [];
@@ -548,11 +567,11 @@ export class SupabaseService {
       // Enriquecer datos con cantidad del número ganador
       const enrichedData = await Promise.all((data || []).map(async (sorteo) => {
         const cantidadNumeroGanador = await this.getCantidadNumeroGanadorPorSucursal(
-          sorteoId, 
-          sorteo.sucursal, 
+          sorteoId,
+          sorteo.sucursal,
           sorteo.numero_ganador
         );
-        
+
         return {
           ...sorteo,
           cantidad_numero_ganador: cantidadNumeroGanador
@@ -568,8 +587,8 @@ export class SupabaseService {
 
   // Método auxiliar para obtener la cantidad comprada del número ganador por sucursal
   private async getCantidadNumeroGanadorPorSucursal(
-    sorteoId: string, 
-    sucursal: string, 
+    sorteoId: string,
+    sucursal: string,
     numeroGanador: string
   ): Promise<number> {
     try {
@@ -762,7 +781,7 @@ export class SupabaseService {
           } else {
             return; // Skip unknown sorteo types
           }
-          
+
           if (sorteoResumen[mappedKey]) {
             sorteoResumen[mappedKey].totalVendido = parseFloat(row.total_vendido) || 0;
             sorteoResumen[mappedKey].numeroGanador = row.numero_ganador ? parseInt(row.numero_ganador) : null;
@@ -822,7 +841,7 @@ export class SupabaseService {
           } else {
             return; // Skip unknown sorteo types
           }
-          
+
           if (sorteoResumen[mappedKey]) {
             sorteoResumen[mappedKey].totalVendido = parseFloat(row.total_vendido) || 0;
             sorteoResumen[mappedKey].numeroGanador = row.numero_ganador ? parseInt(row.numero_ganador) : null;
@@ -924,7 +943,7 @@ export class SupabaseService {
           } else {
             return; // Skip unknown sorteo types
           }
-          
+
           if (sorteoResumen[mappedKey]) {
             sorteoResumen[mappedKey].totalVendido = item.sum || 0;
           }
@@ -945,7 +964,7 @@ export class SupabaseService {
           } else {
             return; // Skip unknown sorteo types
           }
-          
+
           if (sorteoResumen[mappedKey]) {
             sorteoResumen[mappedKey].numeroGanador = sorteo.numero_ganador ? parseInt(sorteo.numero_ganador) : null;
             sorteoResumen[mappedKey].factor = sorteo.factor_multiplicador || 70;
@@ -1070,7 +1089,7 @@ export class SupabaseService {
       // Obtener todas las ventas del sorteo
       const startOfDay = this.getStartOfDayHonduras(new Date(sorteo.fecha));
       const endOfDay = this.getEndOfDayHonduras(new Date(sorteo.fecha));
-      
+
       const { data: sales, error: salesError } = await this.supabase
         .from('sales')
         .select('*, sale_details(*)')
@@ -1469,6 +1488,16 @@ export class SupabaseService {
     const seconds = pad(date.getSeconds());
 
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  formatLocalDateForSupabase_SinHora(date: Date): string {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1); // Mes empieza en 0
+    const day = pad(date.getDate());
+
+    return `${year}-${month}-${day}`;
   }
 
   // Función para formatear solo la fecha (YYYY-MM-DD) para consultas RPC
@@ -2107,7 +2136,7 @@ export class SupabaseService {
   }> {
     try {
       let startDateStr, endDateStr;
-      
+
       if (fechaDesde && fechaHasta) {
         startDateStr = this.formatLocalDateForSupabase(this.getStartOfDayHonduras(fechaDesde));
         endDateStr = this.formatLocalDateForSupabase(this.getEndOfDayHonduras(fechaHasta));
@@ -2204,7 +2233,7 @@ export class SupabaseService {
           numerosPorSorteo.set(sale.sorteo, new Map());
         }
         const sorteoMap = numerosPorSorteo.get(sale.sorteo);
-        
+
         if (!sorteoMap.has(sale.sucursal)) {
           sorteoMap.set(sale.sucursal, new Map());
         }
@@ -2213,7 +2242,7 @@ export class SupabaseService {
         // Procesar detalles de la venta
         (sale.sale_details || []).forEach(detail => {
           const numero = parseInt(detail.numero.toString());
-          
+
           // Agregar a números por sorteo/sucursal
           if (!sucursalMap.has(numero)) {
             sucursalMap.set(numero, { totalVendido: 0, cantidadVentas: 0 });
@@ -2264,7 +2293,7 @@ export class SupabaseService {
           numerosMap.forEach((data: any) => {
             totalSucursal += data.totalVendido;
           });
-          
+
           const numeros: Array<{
             numero: number;
             totalVendido: number;
@@ -2319,7 +2348,7 @@ export class SupabaseService {
   }> {
     try {
       let startDateStr, endDateStr;
-      
+
       if (fechaDesde && fechaHasta) {
         startDateStr = this.formatLocalDateForSupabase(this.getStartOfDayHonduras(fechaDesde));
         endDateStr = this.formatLocalDateForSupabase(this.getEndOfDayHonduras(fechaHasta));
@@ -2598,17 +2627,12 @@ export class SupabaseService {
     }
   }
 
-  async obtenerMovimientosCaja(fecha: Date, sucursal: string): Promise<import('../models/interfaces').MovimientoCaja[]> {
+  async obtenerMovimientosCaja(sucursal: string): Promise<import('../models/interfaces').MovimientoCaja[]> {
     try {
-      const startOfDay = this.getStartOfDayHonduras(fecha);
-      const endOfDay = this.getEndOfDayHonduras(fecha);
-      
       const { data, error } = await this.supabase
-        .from('movimientos_caja')
+        .from('vista_movimientos_caja_filtrada')
         .select('*')
         .eq('sucursal', sucursal)
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay))
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -2623,7 +2647,9 @@ export class SupabaseService {
         fecha: new Date(row.fecha),
         sucursal: row.sucursal,
         nombreReceptor: row.nombre_receptor,
-        createdAt: new Date(row.created_at)
+        createdAt: new Date(row.created_at),
+        // extra: por si quieres mostrar la fecha de inicio que la vista usó
+        fechaInicio: row.fecha_inicio ? new Date(row.fecha_inicio) : undefined
       }));
     } catch (error) {
       console.error('Error al obtener movimientos de caja:', error);
@@ -2631,18 +2657,57 @@ export class SupabaseService {
     }
   }
 
+
   // ================== RESUMEN DE CAJA DIARIO ==================
+
+  async calcularResumenCajaGeneral(): Promise<any> {
+    try {
+      console.log('Calculando resumen de caja general');
+
+      // Usar la función SQL creada para calcular el resumen
+      const { data, error } = await this.supabase
+        .rpc('fn_resumen_general');
+      console.log('Resultado de la función fn_resumen_cierre_actual_desde_ultimo_cierre:', data, error);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const resultado = data[0];
+        return {
+          total_vendido: parseFloat(resultado.total_vendido || '0'),
+          total_pagado: parseFloat(resultado.total_pagado || '0'),
+          total_neto: parseFloat(resultado.total_neto || '0'),
+          movimientos_entrada: parseFloat(resultado.movimientos_entrada || '0'),
+          movimientos_salida: parseFloat(resultado.movimientos_salida || '0'),
+          balance_final: parseFloat(resultado.balance_final || '0'),
+          cantidad_ventas: parseInt(resultado.cantidad_ventas || '0'),
+        };
+      }
+
+      return {
+        total_vendido: 0,
+        total_pagado: 0,
+        total_neto: 0,
+        movimientos_entrada: 0,
+        movimientos_salida: 0,
+        balance_final: 0
+      };
+    } catch (error) {
+      console.error('Error al calcular resumen de caja diario:', error);
+    }
+  }
 
   async calcularResumenCajaDiario(fecha: Date, sucursal: string): Promise<any> {
     try {
       const fechaStr = this.formatDateOnlyForSupabase(fecha);
+      console.log('Calculando resumen de caja diario para:', fechaStr, 'Sucursal:', sucursal);
 
       // Usar la función SQL creada para calcular el resumen
       const { data, error } = await this.supabase
-        .rpc('calcular_resumen_caja_diario', {
-          p_fecha: fechaStr,
+        .rpc('fn_resumen_cierre_actual_desde_ultimo_cierre', {
           p_sucursal: sucursal
         });
+      console.log('Resultado de la función fn_resumen_cierre_actual_desde_ultimo_cierre:', data, error);
 
       if (error) throw error;
 
@@ -2672,12 +2737,30 @@ export class SupabaseService {
       return await this.calcularResumenCajaManual(fecha, sucursal);
     }
   }
+  async calcularResumenCajaDiarioxSorteo(sucursal: string): Promise<any> {
+    try {
+
+      // Usar la función SQL creada para calcular el resumen
+      const { data, error } = await this.supabase
+        .rpc('fn_resumen_cierre_actual_por_sorteo', {
+          p_sucursal: sucursal
+        });
+      console.log('Resultado de la función fn_resumen_cierre_actual_desde_ultimo_cierre:', data, error);
+
+      if (error) throw error;
+      return data;
+
+    } catch (error) {
+      console.error('Error al calcular resumen de caja diario:', error);
+      // Fallback: calcular manualmente
+    }
+  }
 
   private async calcularResumenCajaManual(fecha: Date, sucursal: string): Promise<any> {
     try {
       const startOfDay = this.getStartOfDayHonduras(fecha);
       const endOfDay = this.getEndOfDayHonduras(fecha);
-      
+
       // Calcular total vendido
       const { data: salesData, error: salesError } = await this.supabase
         .from('sales')
@@ -2754,107 +2837,80 @@ export class SupabaseService {
 
   // ================== SORTEOS PENDIENTES DE PAGO ==================
 
-  async obtenerSorteosPendientesPago(fecha: Date, sucursal: string): Promise<any[]> {
+  async obtenerSorteosPendientesPago(sucursal: string): Promise<any[]> {
     try {
-      const startOfDay = this.getStartOfDayHonduras(fecha);
-      const endOfDay = this.getEndOfDayHonduras(fecha);
-
-      // Obtener sorteos pendientes
+      // 1. Obtener sorteos pendientes de pago desde la vista
       const { data: sorteosData, error } = await this.supabase
-        .from('sorteos')
+        .from('vista_sorteos_pendientes_pago_filtrada')
         .select('*')
         .eq('sucursal', sucursal)
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay))
-        .gt('total_pagado', 0)
         .order('sorteo');
 
       if (error) throw error;
+      const sorteosPendientes = sorteosData || [];
 
-      // Filtrar solo los que realmente tengan premios que pagar
-      const sorteosPendientes = sorteosData
-
-      // Obtener movimientos de caja para verificar pagos realizados
+      // 2. Obtener movimientos de caja (pagos) desde la vista filtrada
       const { data: movimientosData, error: movimientosError } = await this.supabase
-        .from('movimientos_caja')
+        .from('vista_movimientos_caja_filtrada')
         .select('sorteo_id, tipo, motivo')
         .eq('sucursal', sucursal)
-        .eq('tipo', 'salida')
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+        .eq('tipo', 'salida');
 
       if (movimientosError) {
         console.warn('Error obteniendo movimientos de caja:', movimientosError);
       }
 
-      // Crear mapa de sorteos ya pagados
       const sorteosPagados = new Set();
       (movimientosData || []).forEach(movimiento => {
-        if (movimiento.motivo && 
-            movimiento.motivo.includes('Pago premio sorteo') && 
-            movimiento.sorteo_id) {
+        if (
+          movimiento.motivo &&
+          movimiento.motivo.includes('Pago premio sorteo') &&
+          movimiento.sorteo_id
+        ) {
           sorteosPagados.add(movimiento.sorteo_id);
         }
       });
 
-      if (sorteosPendientes.length === 0) {
-        return [];
-      }
-
-      // NO filtrar por estado de pago - mostrar TODOS los sorteos con premios
-      // Solo verificar que tengan número ganador y total a pagar
-      const sorteosTodos = sorteosPendientes; // Mostrar todos, no filtrar por pagados
-
-      // Optimización: obtener todas las ventas del día de una vez con JOIN interno
+      // 3. Obtener ventas relacionadas a los sorteos encontrados
       const { data: ventasData, error: ventasError } = await this.supabase
         .from('sales')
         .select(`
-          sorteo,
-          sale_details!inner(numero, monto)
-        `)
+        sorteo,
+        sale_details!inner(numero, monto)
+      `)
         .eq('sucursal', sucursal)
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay))
-        .in('sorteo', sorteosTodos.map(s => s.sorteo));
+        .in('sorteo', sorteosPendientes.map(s => s.sorteo));
 
       if (ventasError) {
-        console.warn('Error obteniendo ventas del día:', ventasError);
+        console.warn('Error obteniendo ventas:', ventasError);
       }
 
-      // Crear mapa de ventas por sorteo y número
+      // 4. Agrupar ventas por sorteo y número
       const ventasPorSorteo = new Map();
       (ventasData || []).forEach(venta => {
         if (!ventasPorSorteo.has(venta.sorteo)) {
           ventasPorSorteo.set(venta.sorteo, new Map());
         }
-        
         const sorteoMap = ventasPorSorteo.get(venta.sorteo);
         venta.sale_details.forEach(detalle => {
           const numero = parseInt(detalle.numero);
           const monto = parseFloat(detalle.monto || 0);
-          
-          if (sorteoMap.has(numero)) {
-            sorteoMap.set(numero, sorteoMap.get(numero) + monto);
-          } else {
-            sorteoMap.set(numero, monto);
-          }
+          sorteoMap.set(numero, (sorteoMap.get(numero) || 0) + monto);
         });
       });
 
-      // Procesar cada sorteo con los datos ya cargados
-      const sorteosConDetalle = sorteosTodos.map(sorteo => {
+      // 5. Armar respuesta final
+      return sorteosPendientes.map(sorteo => {
         const numeroGanador = parseInt(sorteo.numero_ganador);
         const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 75);
-        
-        // Obtener cantidad comprada del número ganador
+        const totalOriginal = parseFloat(sorteo.total_pagado || '0');
+
         let cantidadCompradaNumeroGanador = 0;
         if (ventasPorSorteo.has(sorteo.sorteo)) {
           cantidadCompradaNumeroGanador = ventasPorSorteo.get(sorteo.sorteo).get(numeroGanador) || 0;
         }
 
-        // Calcular total que se debe pagar
         const totalCalculadoPagar = cantidadCompradaNumeroGanador * factorMultiplicador;
-        const totalOriginal = parseFloat(sorteo.total_pagado || '0');
 
         return {
           ...sorteo,
@@ -2862,24 +2918,22 @@ export class SupabaseService {
           total_calculado_pagar: totalCalculadoPagar,
           factor_multiplicador: factorMultiplicador,
           ya_pagado: sorteosPagados.has(sorteo.id),
-          // Para verificación, incluir el cálculo
           calculo_detalle: {
             cantidad_comprada: cantidadCompradaNumeroGanador,
             factor: factorMultiplicador,
             total_calculado: totalCalculadoPagar,
             total_original: totalOriginal,
             diferencia: Math.abs(totalCalculadoPagar - totalOriginal),
-            coincide: Math.abs(totalCalculadoPagar - totalOriginal) < 0.01 // Tolerancia de 1 centavo
+            coincide: Math.abs(totalCalculadoPagar - totalOriginal) < 0.01
           }
         };
       });
-
-      return sorteosConDetalle;
     } catch (error) {
       console.error('Error al obtener sorteos pendientes de pago:', error);
       return [];
     }
   }
+
 
   // ================== CIERRES DIARIOS ==================
 
@@ -2893,6 +2947,7 @@ export class SupabaseService {
         .eq('fecha', fechaStr)
         .eq('sucursal', sucursal)
         .single();
+      console.log('data cierre ', data);
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -2952,7 +3007,7 @@ export class SupabaseService {
 
   // ================== RESUMEN POR SORTEO ==================
 
-  async obtenerResumenSorteo(fecha: Date, sucursal: string, sorteo: string): Promise<import('../models/interfaces').SorteoResumen | undefined> {
+  async obtenerResumenSorteo2(fecha: Date, sucursal: string, sorteo: string): Promise<import('../models/interfaces').SorteoResumen | undefined> {
     try {
       const fechaStr = this.formatDateOnlyForSupabase(fecha);
 
@@ -2986,10 +3041,44 @@ export class SupabaseService {
     }
   }
 
+  async obtenerResumenSorteo(fecha: Date, sucursal: string, sorteo: string): Promise<import('../models/interfaces').SorteoResumen | undefined> {
+    try {
+      const formattedDate = this.formatLocalDateForSupabase(fecha);
+
+      const { data, error } = await this.client
+        .from('resumen_ventas_sorteos_x_sucursal_diario')
+        .select('*')
+        .eq('fecha', formattedDate)
+        .eq('sucursal', sucursal)
+        .eq('sorteo', sorteo)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        return {
+          numeroGanador: data.numero_ganador,
+          factor: data.factor_multiplicador,
+          ventaPorNumero: data.montovendido,
+          totalVendido: data.total_vendido,
+          totalPagado: data.total_a_pagar,
+          totalNeto: data.total_vendido - data.total_a_pagar
+        };
+      }
+
+      return undefined;
+    } catch (error) {
+      console.warn(`Error al obtener resumen del sorteo ${sorteo}:`, error);
+      return undefined;
+    }
+  }
+
   private async obtenerResumenSorteoBasico(fecha: Date, sucursal: string, sorteo: string): Promise<import('../models/interfaces').SorteoResumen | undefined> {
     try {
       const sorteoId = `${this.formatDateOnlyForSupabase(fecha)}-${sorteo}`;
-      
+
       const { data, error } = await this.supabase
         .from('sorteos')
         .select('*')
@@ -3000,7 +3089,7 @@ export class SupabaseService {
       if (error || !data) return undefined;
 
       let ventaPorNumero = 0;
-      
+
       if (data.numero_ganador) {
         // Calcular venta específica del número ganador
         const { data: ventaData, error: ventaError } = await this.supabase
@@ -3015,8 +3104,8 @@ export class SupabaseService {
           .lte('fecha', this.formatLocalDateForSupabase(this.getEndOfDayHonduras(fecha)));
 
         if (!ventaError && ventaData) {
-          ventaPorNumero = ventaData.reduce((sum, sale) => 
-            sum + (sale.sale_details || []).reduce((detailSum: number, detail: any) => 
+          ventaPorNumero = ventaData.reduce((sum, sale) =>
+            sum + (sale.sale_details || []).reduce((detailSum: number, detail: any) =>
               detailSum + parseFloat(detail.monto), 0), 0);
         }
       }
@@ -3062,7 +3151,7 @@ export class SupabaseService {
   async identificarSorteosPagados(fecha: Date): Promise<string[]> {
     try {
       const fechaStr = this.formatDateOnlyForSupabase(fecha);
-      
+
       const { data, error } = await this.supabase
         .from('movimientos_caja')
         .select('sorteo_id')
@@ -3070,7 +3159,7 @@ export class SupabaseService {
         .not('sorteo_id', 'is', null);
 
       if (error) throw error;
-      
+
       return [...new Set((data || []).map(item => item.sorteo_id))];
     } catch (error) {
       console.error('Error identificando sorteos pagados:', error);
@@ -3091,7 +3180,7 @@ export class SupabaseService {
         .not('sucursal', 'is', null);
 
       if (error) throw error;
-      
+
       const sucursales = [...new Set((data || []).map(item => item.sucursal))];
       return sucursales.filter(s => s && s.trim() !== '');
     } catch (error) {
@@ -3107,13 +3196,13 @@ export class SupabaseService {
     try {
       // Obtener los datos básicos de resumen de caja
       const resumenCaja = await this.calcularResumenCajaDiario(fecha, sucursal);
-      
+
       // Obtener sorteos pendientes con información detallada
-      const sorteosPendientes = await this.obtenerSorteosPendientesPago(fecha, sucursal);
-      
+      const sorteosPendientes = await this.obtenerSorteosPendientesPago(sucursal);
+
       // Obtener movimientos de caja
-      const movimientosCaja = await this.obtenerMovimientosCaja(fecha, sucursal);
-      
+      const movimientosCaja = await this.obtenerMovimientosCaja(sucursal);
+
       return {
         resumenCaja,
         sorteosPendientes,

@@ -14,6 +14,24 @@
     </div>
   </div>
 
+  <div class="selection-container">
+    <div class="selection-grid">
+      <div class="selection-item">
+        <label for="sucursalSelector" class="selection-label">
+          <i class="fas fa-store"></i> Sucursal
+        </label>
+        <select id="sucursalSelector" class="selection-input" [(ngModel)]="selectedSucursalForCierre"
+          (change)="onSucursalSeleccionada()">
+          <option value="">-- Seleccione --</option>
+          <option *ngFor="let sucursal of sucursalesDisponibles" [value]="sucursal">
+            {{ sucursal }}
+          </option>
+        </select>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Estado del cierre -->
   <div class="alert" [ngClass]="yaCerrado ? 'alert-info' : 'alert-warning'">
     <i class="fas" [ngClass]="yaCerrado ? 'fa-check-circle' : 'fa-clock'"></i>
@@ -28,7 +46,7 @@
 
   <!-- Contenido principal -->
   <div *ngIf="!loading" class="main-content">
-    
+
     <!-- Resumen Financiero -->
     <div class="resumen-card" *ngIf="resumenCaja">
       <div class="card-header">
@@ -62,6 +80,8 @@
           </div>
         </div>
       </div>
+
+
     </div>
 
     <!-- Acciones Principales -->
@@ -71,17 +91,11 @@
         <h4>💱 Movimientos de Caja</h4>
         <p>Registrar ingresos y salidas de efectivo</p>
         <div class="action-buttons">
-          <button 
-            class="btn btn-success" 
-            (click)="abrirModalMovimiento('entrada')"
-            [disabled]="yaCerrado">
+          <button class="btn btn-success" (click)="abrirModalMovimiento('entrada')" [disabled]="yaCerrado">
             <i class="fas fa-plus"></i>
             Ingreso
           </button>
-          <button 
-            class="btn btn-danger" 
-            (click)="abrirModalMovimiento('salida')"
-            [disabled]="yaCerrado">
+          <button class="btn btn-danger" (click)="abrirModalMovimiento('salida')" [disabled]="yaCerrado">
             <i class="fas fa-minus"></i>
             Salida
           </button>
@@ -93,17 +107,11 @@
         <h4>🖨️ Reportes</h4>
         <p>Imprimir resumen del día y cierre diario</p>
         <div class="action-buttons">
-          <button 
-            class="btn btn-primary" 
-            (click)="imprimirResumenCaja()"
-            [disabled]="!resumenCaja">
+          <button class="btn btn-primary" (click)="imprimirResumenCaja()" [disabled]="!resumenCaja">
             <i class="fas fa-print"></i>
             {{ yaCerrado ? 'Reimprimir Resumen' : 'Imprimir Resumen' }}
           </button>
-          <button 
-            class="btn btn-info" 
-            (click)="imprimirCierreDiario()"
-            [disabled]="!yaCerrado || !cierreExistente"
+          <button class="btn btn-info" (click)="imprimirCierreDiario()" [disabled]="!yaCerrado || !cierreExistente"
             *ngIf="yaCerrado">
             <i class="fas fa-file-alt"></i>
             Reimprimir Cierre
@@ -112,14 +120,10 @@
       </div>
 
       <!-- Cierre Final -->
-      <div class="action-card cierre-card" 
-           [class.disabled]="yaCerrado">
+      <div class="action-card cierre-card" [class.disabled]="yaCerrado">
         <h4>🔐 Cierre Diario</h4>
         <p>{{ yaCerrado ? 'Cierre realizado exitosamente' : 'Finalizar el día y cerrar la caja' }}</p>
-        <button 
-          class="btn btn-warning full-width" 
-          (click)="abrirModalCierre()"
-          [disabled]="yaCerrado">
+        <button class="btn btn-warning full-width" (click)="abrirModalCierre()" [disabled]="yaCerrado">
           <i class="fas fa-lock"></i>
           {{ yaCerrado ? 'Ya Cerrado' : 'Realizar Cierre' }}
         </button>
@@ -139,18 +143,18 @@
               <h5>{{ sorteo.sorteo.toUpperCase() }}</h5>
               <div class="sorteo-details">
                 <span class="numero-ganador">🎯 Número: {{ sorteo.numero_ganador }}</span>
-                <span class="cantidad-comprada">🛒 Comprado: {{ formatearMonto(sorteo.cantidad_comprada_numero_ganador || 0) }}</span>
+                <span class="cantidad-comprada">🛒 Comprado: {{ formatearMonto(sorteo.cantidad_comprada_numero_ganador
+                  || 0) }}</span>
                 <span class="factor">⚡ Factor: {{ sorteo.factor_multiplicador }}x</span>
                 <div class="calculo-formula">
-                  <span class="formula">{{ formatearMonto(sorteo.cantidad_comprada_numero_ganador || 0) }} × {{ sorteo.factor_multiplicador }} = {{ formatearMonto(sorteo.total_calculado_pagar || sorteo.total_pagado) }}</span>
+                  <span class="formula">{{ formatearMonto(sorteo.cantidad_comprada_numero_ganador || 0) }} × {{
+                    sorteo.factor_multiplicador }} = {{ formatearMonto(sorteo.total_calculado_pagar ||
+                    sorteo.total_pagado) }}</span>
                 </div>
               </div>
             </div>
-            <button 
-              class="btn btn-sm" 
-              [ngClass]="isSorteoPagado(sorteo.id) ? 'btn-secondary' : 'btn-success'"
-              (click)="abrirModalPagoSorteo(sorteo)"
-              [disabled]="yaCerrado || isSorteoPagado(sorteo.id)">
+            <button class="btn btn-sm" [ngClass]="isSorteoPagado(sorteo.id) ? 'btn-secondary' : 'btn-success'"
+              (click)="abrirModalPagoSorteo(sorteo)" [disabled]="yaCerrado || isSorteoPagado(sorteo.id)">
               <i class="fas" [ngClass]="isSorteoPagado(sorteo.id) ? 'fa-check' : 'fa-hand-holding-usd'"></i>
               {{ isSorteoPagado(sorteo.id) ? 'Ya Pagado' : 'Pagar Premio' }}
             </button>
@@ -198,8 +202,8 @@
 </div>
 
 <!-- Modal: Pago de Sorteo -->
-<div class="modal" [style.display]="showPagoSorteoModal ? 'flex' : 'none'" 
-     [class.show]="showPagoSorteoModal" (click)="cerrarModalPagoSorteo()">
+<div class="modal" [style.display]="showPagoSorteoModal ? 'flex' : 'none'" [class.show]="showPagoSorteoModal"
+  (click)="cerrarModalPagoSorteo()">
   <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
     <div class="modal-content">
       <div class="modal-header">
@@ -256,8 +260,8 @@
 </div>
 
 <!-- Modal: Confirmación de Pago -->
-<div class="modal" [style.display]="showConfirmPagoModal ? 'flex' : 'none'" 
-     [class.show]="showConfirmPagoModal" (click)="cerrarModalConfirmPago()">
+<div class="modal" [style.display]="showConfirmPagoModal ? 'flex' : 'none'" [class.show]="showConfirmPagoModal"
+  (click)="cerrarModalConfirmPago()">
   <div class="modal-dialog" (click)="$event.stopPropagation()">
     <div class="modal-content">
       <div class="modal-header">
@@ -269,35 +273,20 @@
       <div class="modal-body">
         <div class="form-group">
           <label for="nombreReceptor">Nombre de quien recibe (opcional):</label>
-          <input 
-            type="text" 
-            id="nombreReceptor"
-            class="form-control" 
-            [(ngModel)]="datosConfirmPago.nombreReceptor"
-            (ngModelChange)="onFormValueChange()"
-            placeholder="Ingrese el nombre de quien recibe el premio">
+          <input type="text" id="nombreReceptor" class="form-control" [(ngModel)]="datosConfirmPago.nombreReceptor"
+            (ngModelChange)="onFormValueChange()" placeholder="Ingrese el nombre de quien recibe el premio">
         </div>
         <div class="form-group">
           <label for="montoExacto">Monto pagado:</label>
-          <input 
-            type="number" 
-            id="montoExacto"
-            class="form-control" 
-            [(ngModel)]="datosConfirmPago.montoExacto"
-            (ngModelChange)="onFormValueChange()"
-            step="0.01"
-            readonly>
+          <input type="number" id="montoExacto" class="form-control" [(ngModel)]="datosConfirmPago.montoExacto"
+            (ngModelChange)="onFormValueChange()" step="0.01" readonly>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" (click)="cerrarModalConfirmPago()">
           Cancelar
         </button>
-        <button 
-          type="button" 
-          class="btn btn-success" 
-          (click)="procesarPagoSorteo()"
-          [disabled]="procesandoPago">
+        <button type="button" class="btn btn-success" (click)="procesarPagoSorteo()" [disabled]="procesandoPago">
           <i class="fas fa-spinner fa-spin" *ngIf="procesandoPago"></i>
           <i class="fas fa-check" *ngIf="!procesandoPago"></i>
           {{ procesandoPago ? 'Procesando...' : 'Confirmar Pago Realizado' }}
@@ -308,13 +297,14 @@
 </div>
 
 <!-- Modal: Movimiento de Caja -->
-<div class="modal" [style.display]="showMovimientoModal ? 'flex' : 'none'" 
-     [class.show]="showMovimientoModal" (click)="cerrarModalMovimiento()">
+<div class="modal" [style.display]="showMovimientoModal ? 'flex' : 'none'" [class.show]="showMovimientoModal"
+  (click)="cerrarModalMovimiento()">
   <div class="modal-dialog" (click)="$event.stopPropagation()">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
-          <i class="fas" [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'fa-plus text-success' : 'fa-minus text-danger'"></i>
+          <i class="fas"
+            [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'fa-plus text-success' : 'fa-minus text-danger'"></i>
           {{ nuevoMovimiento.tipo === 'entrada' ? 'Registrar Ingreso de Efectivo' : 'Registrar Salida de Efectivo' }}
         </h5>
         <button type="button" class="close" (click)="cerrarModalMovimiento()" aria-label="Close">
@@ -325,15 +315,9 @@
         <form>
           <div class="form-group">
             <label for="motivo">Motivo *:</label>
-            <textarea 
-              id="motivo"
-              class="form-control" 
-              [(ngModel)]="nuevoMovimiento.motivo"
-              (ngModelChange)="onFormValueChange()"
-              name="motivo"
-              rows="3"
-              placeholder="Describa el motivo de este movimiento"
-              required></textarea>
+            <textarea id="motivo" class="form-control" [(ngModel)]="nuevoMovimiento.motivo"
+              (ngModelChange)="onFormValueChange()" name="motivo" rows="3"
+              placeholder="Describa el motivo de este movimiento" required></textarea>
           </div>
           <div class="form-group">
             <label for="monto">Monto *:</label>
@@ -341,17 +325,8 @@
               <div class="input-group-prepend">
                 <span class="input-group-text">L</span>
               </div>
-              <input 
-                type="number" 
-                id="monto"
-                class="form-control" 
-                [(ngModel)]="nuevoMovimiento.monto"
-                (ngModelChange)="onFormValueChange()"
-                name="monto"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                required>
+              <input type="number" id="monto" class="form-control" [(ngModel)]="nuevoMovimiento.monto"
+                (ngModelChange)="onFormValueChange()" name="monto" step="0.01" min="0" placeholder="0.00" required>
             </div>
           </div>
         </form>
@@ -360,12 +335,8 @@
         <button type="button" class="btn btn-secondary" (click)="cerrarModalMovimiento()">
           Cancelar
         </button>
-        <button 
-          type="button" 
-          class="btn" 
-          [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'btn-success' : 'btn-danger'"
-          (click)="registrarMovimiento()"
-          [disabled]="!puedeRegistrarMovimiento">
+        <button type="button" class="btn" [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'btn-success' : 'btn-danger'"
+          (click)="registrarMovimiento()" [disabled]="!puedeRegistrarMovimiento">
           <i class="fas" [ngClass]="nuevoMovimiento.tipo === 'entrada' ? 'fa-plus' : 'fa-minus'"></i>
           Registrar {{ nuevoMovimiento.tipo === 'entrada' ? 'Ingreso' : 'Salida' }}
         </button>
@@ -375,8 +346,8 @@
 </div>
 
 <!-- Modal: Cierre Diario -->
-<div class="modal" [style.display]="showCierreModal ? 'flex' : 'none'" 
-     [class.show]="showCierreModal" (click)="cerrarModalCierre()">
+<div class="modal" [style.display]="showCierreModal ? 'flex' : 'none'" [class.show]="showCierreModal"
+  (click)="cerrarModalCierre()">
   <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
     <div class="modal-content">
       <div class="modal-header">
@@ -395,22 +366,15 @@
             </div>
           </div>
         </div>
-        
+
         <div class="form-group">
           <label for="efectivoReportado">Efectivo reportado en caja *:</label>
           <div class="input-group">
             <div class="input-group-prepend">
               <span class="input-group-text">L</span>
             </div>
-            <input 
-              type="number" 
-              id="efectivoReportado"
-              class="form-control" 
-              [(ngModel)]="datosCierre.efectivoReportado"
-              (ngModelChange)="onFormValueChange()"
-              step="0.01"
-              placeholder="0.00"
-              required>
+            <input type="number" id="efectivoReportado" class="form-control" [(ngModel)]="datosCierre.efectivoReportado"
+              (ngModelChange)="onFormValueChange()" step="0.01" placeholder="0.00" required>
           </div>
           <small class="form-text text-muted">
             💡 Puede ingresar valores negativos si el efectivo en caja es menor al calculado
@@ -426,12 +390,8 @@
 
         <div class="form-group">
           <label for="notas">Notas adicionales:</label>
-          <textarea 
-            id="notas"
-            class="form-control" 
-            [(ngModel)]="datosCierre.notas"
-            (ngModelChange)="onFormValueChange()"
-            rows="3"
+          <textarea id="notas" class="form-control" [(ngModel)]="datosCierre.notas"
+            (ngModelChange)="onFormValueChange()" rows="3"
             placeholder="Observaciones sobre el cierre (opcional)"></textarea>
         </div>
       </div>
@@ -439,10 +399,7 @@
         <button type="button" class="btn btn-secondary" (click)="cerrarModalCierre()">
           Cancelar
         </button>
-        <button 
-          type="button" 
-          class="btn btn-warning" 
-          (click)="realizarCierreDiario()"
+        <button type="button" class="btn btn-warning" (click)="realizarCierreDiario()"
           [disabled]="!puedeRealizarCierre">
           <i class="fas fa-spinner fa-spin" *ngIf="loading"></i>
           <i class="fas fa-lock" *ngIf="!loading"></i>

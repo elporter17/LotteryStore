@@ -6,6 +6,7 @@ import { PrintService } from '../../services/print.service';
 import { Router } from '@angular/router';
 import { SorteoSchedule, Sale, SaleDetail } from '../../models/interfaces';
 import { Subscription } from 'rxjs';
+import { ro } from 'date-fns/locale';
 
 @Component({
   selector: 'app-sucursal',
@@ -559,6 +560,8 @@ export class SucursalComponent implements OnInit, OnDestroy {
       this.showAmountModal = false;
       this.showConfirmModal = true;
       this.isProcessingModal = false;
+
+      this.confirmAddNumber();
       this.cdr.detectChanges();
     } else {
       this.isProcessingModal = false;
@@ -570,17 +573,18 @@ export class SucursalComponent implements OnInit, OnDestroy {
   confirmAddNumber(): void {
     if (this.tempNumber !== null && this.tempAmount !== null) {
       // Verificar si el número ya fue seleccionado
-      const existingIndex = this.selectedNumbers.findIndex(n => n.numero === this.tempNumber);
-      if (existingIndex >= 0) {
-        // Actualizar monto
-        this.selectedNumbers[existingIndex].monto += this.tempAmount!;
-      } else {
-        // Agregar nuevo número
-        this.selectedNumbers.push({
-          numero: this.tempNumber,
-          monto: this.tempAmount
-        });
-      }
+      //const existingIndex = this.selectedNumbers.findIndex(n => n.numero === this.tempNumber);
+      // if (existingIndex >= 0) {
+      //   // Actualizar monto
+      //   this.selectedNumbers[existingIndex].monto += this.tempAmount!;
+      // } else {
+      //   // Agregar nuevo número
+
+      // }
+      this.selectedNumbers.push({
+        numero: this.tempNumber,
+        monto: this.tempAmount
+      });
 
       // Quitar el modal de confirmación, solo cerrar modales
       this.closeAllModals();
@@ -611,10 +615,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
     for (const sorteo of sorteos) {
       const [openHour, openMinute] = sorteo.openTime.split(':').map(Number);
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
-      
+
       const openTimeInMinutes = openHour * 60 + openMinute;
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
-      
+
       // Caso especial para sorteo de noche que puede cruzar medianoche
       if (sorteo.name === 'noche') {
         if (closeTimeInMinutes < openTimeInMinutes) {
@@ -646,14 +650,14 @@ export class SucursalComponent implements OnInit, OnDestroy {
     if (!isInActivePeriod) {
       // Buscar el próximo sorteo que abrirá
       const nextSorteo = this.getNextOpeningSorteo(currentTotalMinutes);
-      
+
       if (nextSorteo) {
         this.blockMessage = 'Ventas cerradas';
         this.blockDetail = `El próximo sorteo ${nextSorteo.label} abre a las ${nextSorteo.openTime}`;
         this.nextSorteoName = nextSorteo.label;
         this.nextSorteoOpenTime = nextSorteo.openTime;
         this.timeUntilNextOpening = this.calculateTimeUntilOpening(currentTotalMinutes, nextSorteo);
-        
+
         // Solo mostrar notificación la primera vez que se bloquea
         if (!this.isBlocked) {
           this.notificationService.showWarning(this.blockMessage, this.blockDetail);
@@ -664,12 +668,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
         this.nextSorteoName = '';
         this.nextSorteoOpenTime = '';
         this.timeUntilNextOpening = '';
-        
+
         if (!this.isBlocked) {
           this.notificationService.showWarning(this.blockMessage, this.blockDetail);
         }
       }
-      
+
       this.isBlocked = true;
       this.cdr.detectChanges(); // Forzar actualización de la UI
       return;
@@ -720,24 +724,24 @@ export class SucursalComponent implements OnInit, OnDestroy {
       }
       this.isBlocked = false;
     }
-    
+
     this.cdr.detectChanges(); // Forzar actualización de la UI
   }
 
   // Método para encontrar el próximo sorteo que abrirá
   private getNextOpeningSorteo(currentTotalMinutes: number): any {
     const sorteos = this.sorteoService.getAllSorteos();
-    
+
     // Buscar el próximo sorteo del mismo día
     for (const sorteo of sorteos) {
       const [openHour, openMinute] = sorteo.openTime.split(':').map(Number);
       const openTimeInMinutes = openHour * 60 + openMinute;
-      
+
       if (openTimeInMinutes > currentTotalMinutes) {
         return sorteo;
       }
     }
-    
+
     // Si no hay más sorteos hoy, el próximo será mañana (primer sorteo del día)
     return sorteos[0] || null;
   }
@@ -745,12 +749,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
   // Método para calcular el tiempo hasta la próxima apertura
   private calculateTimeUntilOpening(currentTotalMinutes: number, nextSorteo: any): string {
     if (!nextSorteo) return '';
-    
+
     const [openHour, openMinute] = nextSorteo.openTime.split(':').map(Number);
     const openTimeInMinutes = openHour * 60 + openMinute;
-    
+
     let minutesUntilOpening: number;
-    
+
     if (openTimeInMinutes > currentTotalMinutes) {
       // Sorteo abre hoy
       minutesUntilOpening = openTimeInMinutes - currentTotalMinutes;
@@ -758,10 +762,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
       // Sorteo abre mañana (es el primer sorteo del día)
       minutesUntilOpening = (24 * 60) - currentTotalMinutes + openTimeInMinutes;
     }
-    
+
     const hours = Math.floor(minutesUntilOpening / 60);
     const minutes = minutesUntilOpening % 60;
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
     } else {
@@ -872,7 +876,7 @@ Revisa la consola para más detalles.`);
 
   // Método optimizado que hace una sola consulta agregada
 
-  private async loadSorteoDataOptimized(fecha: Date, sucursal: string): Promise<void> {
+  private async loadSorteoDataOptimized2(fecha: Date, sucursal: string): Promise<void> {
     try {
       console.log('Cargando datos de sorteos optimizados para fecha:', fecha, 'y sucursal:', sucursal);
       // Determinar rango completo del día
@@ -927,8 +931,49 @@ Revisa la consola para más detalles.`);
           }
         });
       }
+      console.log('Datos procesados por sorteo:', this.sorteoData);
 
       console.log('Datos procesados y agregados:', this.sorteoData);
+    } catch (error) {
+      console.error('Error en loadSorteoDataOptimized:', error);
+    }
+  }
+
+  private async loadSorteoDataOptimized(fecha: Date, sucursal: string): Promise<void> {
+    try {
+      console.log('Cargando datos optimizados desde la vista para fecha:', fecha, 'y sucursal:', sucursal);
+
+      const formattedDate = this.supabaseService.formatLocalDateForSupabase(fecha);
+      console.log(sucursal, 'Sucursal para consulta:', sucursal);
+
+        console.log('Fecha formateada para consulta:', formattedDate);
+      const { data, error } = await this.supabaseService.client
+        .from('resumen_ventas_sorteos_x_sucursal_diario_2')
+        .select('*')
+        .eq('fecha', formattedDate)
+        .eq('sucursal', sucursal);
+
+        console.log('Consulta a vista ejecutada:', { data });
+      if (error) {
+        console.error('Error al obtener datos desde la vista:', error);
+        return;
+      }
+
+      console.log('Datos obtenidos desde la vista:', data);
+
+      this.sorteoData = {
+        mañana: { montoVendido: 0, total: 0, ganador: null },
+        tarde: { montoVendido: 0, total: 0, ganador: null },
+        noche: { montoVendido: 0, total: 0, ganador: null }
+      };
+
+      data.forEach((row: any) => {
+         this.sorteoData[row.sorteo.toLowerCase() as 'mañana' | 'tarde' | 'noche'] = {
+          ...row
+        };
+      });
+
+      console.log('Datos procesados y agregados desde vista:', this.sorteoData);
     } catch (error) {
       console.error('Error en loadSorteoDataOptimized:', error);
     }
@@ -939,7 +984,7 @@ Revisa la consola para más detalles.`);
   // Determinar el sorteo actual basado en la hora de Honduras y los horarios configurados
   private getCurrentSorteoTab(): 'mañana' | 'tarde' | 'noche' {
     console.log('Determinando sorteo actual basado en hora de Honduras y horarios configurados...');
-    
+
     // Obtener la hora actual de Honduras
     const hondurasNow = this.supabaseService.getHondurasDateTime();
     const [, timeStr] = this.supabaseService
@@ -954,17 +999,17 @@ Revisa la consola para más detalles.`);
 
     // Obtener todos los sorteos configurados
     const sorteos = this.sorteoService.getAllSorteos();
-    
+
     // Encontrar el sorteo activo basado en los horarios configurados
     for (const sorteo of sorteos) {
       const [openHour, openMinute] = sorteo.openTime.split(':').map(Number);
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
-      
+
       const openTimeInMinutes = openHour * 60 + openMinute;
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
-      
+
       console.log(`Verificando sorteo ${sorteo.name}: ${sorteo.openTime} - ${sorteo.closeTime}`);
-      
+
       // Caso especial para sorteo de noche que puede cruzar medianoche
       if (sorteo.name === 'noche') {
         // Si closeTime es menor que openTime, significa que cruza medianoche
@@ -993,7 +1038,7 @@ Revisa la consola para más detalles.`);
 
     // Si no encuentra ningún sorteo activo, determinar cuál mostrar basado en proximidad
     console.log('No se encontró sorteo activo, determinando por proximidad...');
-    
+
     // Buscar el próximo sorteo que abrirá
     const nextSorteo = this.getNextOpeningSorteo(currentTimeInMinutes);
     if (nextSorteo) {
@@ -1018,13 +1063,13 @@ Revisa la consola para más detalles.`);
     const sorteos = this.sorteoService.getAllSorteos();
     let recentlyClosedSorteo: any = null;
     let minTimeSinceClosure = Infinity;
-    
+
     for (const sorteo of sorteos) {
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
-      
+
       let timeSinceClosure: number;
-      
+
       if (sorteo.name === 'noche' && closeTimeInMinutes < currentTotalMinutes) {
         // Sorteo nocturno que cerró hoy muy temprano
         timeSinceClosure = currentTotalMinutes - closeTimeInMinutes;
@@ -1035,13 +1080,13 @@ Revisa la consola para más detalles.`);
         // Sorteo que cerrará más tarde o mañana
         timeSinceClosure = (24 * 60) - (closeTimeInMinutes - currentTotalMinutes);
       }
-      
+
       if (timeSinceClosure < minTimeSinceClosure && timeSinceClosure > 0) {
         minTimeSinceClosure = timeSinceClosure;
         recentlyClosedSorteo = sorteo;
       }
     }
-    
+
     return recentlyClosedSorteo;
   }
 
@@ -1062,15 +1107,15 @@ Revisa la consola para más detalles.`);
   }
 
   getSorteoTotalVendido(sorteo: string): number {
-    return this.sorteoData[sorteo]?.totalVendido || 0;
+     return this.sorteoData[sorteo]?.total_vendido || 0;
   }
 
   getSorteoNumeroGanador(sorteo: string): number | null {
-    return this.sorteoData[sorteo]?.numeroGanador || null;
+    return this.sorteoData[sorteo]?.numero_ganador || null;
   }
 
   getSorteoTotalPagar(sorteo: string): number {
-    return this.sorteoData[sorteo]?.totalPagar || 0;
+    return this.sorteoData[sorteo]?.total_a_pagar || 0;
   }
 
   getSorteoNumerosVendidos(sorteo: string): Array<{ numero: number, total: number }> {

@@ -19,6 +19,7 @@ export class AdminGuard implements CanActivate {
       timeout(8000), // Aumentar timeout a 8 segundos
       map(user => {
         const isAdmin = user?.role === 'admin';
+        console.log(user, isAdmin);
         return isAdmin;
       }),
       tap(isAdmin => {

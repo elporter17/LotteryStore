@@ -69,8 +69,13 @@ export interface SorteoSchedule {
 export const SORTEO_SCHEDULES: SorteoSchedule[] = [
   { name: 'mañana', label: 'Mañana', closeTime: '9:15' , openTime: '00:47' },
   { name: 'tarde', label: 'Tarde', closeTime: '14:55', openTime: '10:00' },
-  { name: 'noche', label: 'Noche', closeTime: '20:00', openTime: '15:00' }
+  { name: 'noche', label: 'Noche', closeTime: '17:40', openTime: '16:00' }
 ];
+
+export interface ResumenCaja {
+    sorteo: string; // puedes incluir más propiedades si es necesario
+    // ...
+}
 
 // Interfaces para módulo de cierre de caja y pagos
 export interface MovimientoCaja {
@@ -97,9 +102,9 @@ export interface CierreDiario {
   efectivoReportado: number;
   diferencia: number;
   notas?: string;
-  sorteosMañana?: SorteoResumen;
-  sorteosTarde?: SorteoResumen;
-  sorteosNoche?: SorteoResumen;
+  sorteosMañana?: any;
+  sorteosTarde?: any;
+  sorteosNoche?: any;
   createdAt: Date;
 }
 

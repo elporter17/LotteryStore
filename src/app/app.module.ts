@@ -19,7 +19,7 @@ const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   { path: 'login', component: LoginComponent },
   { path: 'sucursal', component: SucursalComponent, canActivate: [AuthGuard] },
-  { path: 'cierre-caja', component: CierreCajaComponent, canActivate: [AuthGuard, SucursalGuard] },
+  { path: 'cierre-caja', component: CierreCajaComponent, canActivate: [AuthGuard,AdminGuard] },
   { path: 'admin', component: AdminComponent, canActivate: [AuthGuard, AdminGuard] },
   { path: 'admin/users', component: UserManagementComponent, canActivate: [AuthGuard, AdminGuard] },
   { path: '**', redirectTo: '/login' }

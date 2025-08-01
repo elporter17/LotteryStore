@@ -8,10 +8,9 @@
     </div>
     
     <div class="header-actions">
-      <button class="btn-header btn-cierre-caja" (click)="abrirModalCierreCaja()"
-              [disabled]="showCierreCajaModal">
+      <button (click)="navigateToCierreCaja()" class="btn-header btn-cierre-caja">
         <i class="fas fa-cash-register"></i> 💰 Cierre de Caja
-        <span *ngIf="showCierreCajaModal" style="margin-left: 10px; color: green;">✅</span>
+        <span style="margin-left: 10px; color: green;">✅</span>
       </button>
       
       <button class="btn-header btn-users" (click)="navigateToUsers()" [disabled]="isLoading">
@@ -64,7 +63,7 @@
               [(ngModel)]="selectedSorteoFilter" (change)="aplicarFiltros()"
               [disabled]="isLoadingFilters">
         <option value="">Todos los sorteos</option>
-        <option *ngFor="let sorteo of sorteos" [value]="sorteo.name">{{ sorteo.label }}</option>
+        <option *ngFor="let sorteo of sorteosRealizados" [value]="sorteo">{{ sorteo }}</option>
       </select>
     </div>
     

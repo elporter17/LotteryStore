@@ -67,12 +67,6 @@ export class AdminComponent implements OnInit {
   factoresPorSucursal: { [sucursal: string]: number } = {};
   currentSorteoForFactors: { sorteo: SorteoSchedule, winningNumber: string } | null = null;
 
-  // Propiedades optimizadas para caché de datos
-  private cachedDashboardData: any = null;
-  private cachedNumbersData: any = null;
-  private lastDataFetch: Date | null = null;
-  private cacheValidTime = 30000; // 30 segundos de caché
-
   // Propiedades para resumen de cierre por sucursales
   showResumenModal: boolean = false;
   resumenSucursales: any[] = [];
@@ -88,10 +82,8 @@ export class AdminComponent implements OnInit {
   sucursalesDisponibles: string[] = [];
   loadingCierreCaja: boolean = false;
   cierreExistenteSucursal: any = null; // Para almacenar el cierre si ya existe
-
-  // Cache para optimización
-  private sucursalesCacheExpiry: Date | null = null;
-  private readonly SUCURSALES_CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+  resumenGeneral: any;
+  sorteosRealizados: any[] = [];
 
   constructor(
     private supabaseService: SupabaseService,
@@ -99,7 +91,8 @@ export class AdminComponent implements OnInit {
     public printService: PrintService,
     private exportService: ExportService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    
   ) {
     // Inicializar fechas usando timezone de Honduras para filtros
     const hondurasToday = this.supabaseService.getHondurasDateTime();
@@ -166,12 +159,38 @@ export class AdminComponent implements OnInit {
       }
     });
 
+    console.log('Sorteos realizados:', this.sorteosRealizados);
+
+    this.sorteosHechos();
+    this.cargarDatosDelDia();
     // Cargar datos iniciales
     this.loadSales();
     this.loadSorteosData(); // Cargar datos de sorteos existentes
     this.initializeUsers();
     this.loadSorteoSchedules(); // Ya no es async
   }
+
+  private async sorteosHechos(): Promise<void> {
+    this.sorteosRealizados = await this.supabaseService.getSorteosRealizados();
+    console.log('Sorteos realizados cargados:', this.sorteosRealizados);
+  }
+
+   private async cargarDatosDelDia(): Promise<void> {
+ 
+        try {
+         
+            // Cargar resumen de caja
+            this.resumenGeneral = await this.supabaseService.calcularResumenCajaGeneral();
+            console.log('Resumen General:', this.resumenGeneral);
+
+            // Forzar actualización de la UI después de cargar todos los datos
+            this.cdr.markForCheck();
+
+        } catch (error) {
+            console.error('Error al cargar datos del día:', error);
+            throw error;
+        }
+    }
 
   async initializeUsers(): Promise<void> {
     try {
@@ -330,10 +349,7 @@ export class AdminComponent implements OnInit {
       if (!this.isLoadingFilters) {
         this.isLoading = true;
       }
-
-      // Limpiar caché cuando se cargan nuevos datos
-      this.clearCache();
-
+  
       // Si hay filtros de rango de fechas, usar el método de rango optimizado
       if (this.fechaDesde && this.fechaHasta) {
         await this.loadSalesByDateRangeOptimized();
@@ -362,9 +378,7 @@ export class AdminComponent implements OnInit {
       // Asignar datos
       this.sales = optimizedData.sales;
       this.saleDetails = optimizedData.saleDetails;
-      this.cachedDashboardData = optimizedData.dashboardData;
-      this.lastDataFetch = new Date();
-
+  
       console.log('Datos optimizados cargados:', {
         ventas: this.sales.length,
         totalVendido: optimizedData.dashboardData.totalVendido
@@ -377,7 +391,6 @@ export class AdminComponent implements OnInit {
       console.error('Error al cargar ventas optimizadas:', error);
       this.sales = [];
       this.saleDetails = {};
-      this.clearCache();
       this.notificationService.showError('Error al cargar las ventas');
     } finally {
       // Solo cambiar isLoading si no estamos en modo filtros
@@ -427,10 +440,6 @@ export class AdminComponent implements OnInit {
         this.selectedSorteoFilter
       );
 
-      this.cachedDashboardData = dashboardData;
-      this.cachedNumbersData = dashboardData.numerosPorSorteo;
-      this.lastDataFetch = new Date();
-
       console.log('Datos de rango optimizados cargados:', {
         ventas: this.sales.length,
         totalVendido: dashboardData.totalVendido
@@ -444,23 +453,7 @@ export class AdminComponent implements OnInit {
       this.notificationService.showError('Error al cargar las ventas: ' + error);
       this.sales = [];
       this.saleDetails = {};
-      this.clearCache();
     }
-  }
-
-  // Método para limpiar caché
-  private clearCache(): void {
-    this.cachedDashboardData = null;
-    this.cachedNumbersData = null;
-    this.lastDataFetch = null;
-  }
-
-  // Verificar si el caché es válido
-  private isCacheValid(): boolean {
-    if (!this.lastDataFetch || !this.cachedDashboardData) {
-      return false;
-    }
-    return (new Date().getTime() - this.lastDataFetch.getTime()) < this.cacheValidTime;
   }
 
 
@@ -634,50 +627,30 @@ export class AdminComponent implements OnInit {
 
   // Métodos para cards de resumen
   getTotalVendido(): number {
-    // Usar caché si está disponible y válido
-    if (this.isCacheValid() && this.cachedDashboardData) {
-      return this.cachedDashboardData.totalVendido;
-    }
+      return this.resumenGeneral?.total_vendido || 0;
 
-    // Fallback al cálculo tradicional si no hay caché
-    return this.sales.reduce((total, sale) => total + sale.total, 0);
   }
 
   getTotalPagado(): number {
-    // Usar caché si está disponible y válido
-    if (this.isCacheValid() && this.cachedDashboardData) {
-      return this.cachedDashboardData.totalPagado;
-    }
 
-    // Fallback al cálculo tradicional si no hay caché
-    let totalPagado = 0;
+    return this.resumenGeneral?.total_pagado || 0;
+  }
+  getTotalSalidas(): number {
 
-    // Calcular total pagado basándose en sorteos cerrados y números ganadores
-    for (const sale of this.sales) {
-      const sorteoSchedule = this.sorteos.find(s => s.name === sale.sorteo);
-      if (sorteoSchedule) {
-        const sorteoData = this.getSorteoData(sorteoSchedule);
-        if (sorteoData && sorteoData.cerrado && sorteoData.numeroGanador) {
-          const saleDetails = this.getSaleDetails(sale.id);
-          for (const detail of saleDetails) {
-            if (detail.numero.toString() === sorteoData.numeroGanador.toString()) {
-              const factor = sorteoData.factorMultiplicador || 70;
-              totalPagado += detail.monto * factor;
-            }
-          }
-        }
-      }
-    }
+    return this.resumenGeneral?.movimientos_salida || 0;
+  }
+  getTotalEntradas(): number {
 
-    return totalPagado;
+    return this.resumenGeneral?.movimientos_entrada || 0;
   }
 
   getGananciaNeta(): number {
-    return this.getTotalVendido() - this.getTotalPagado();
+    return (this.getTotalVendido()  + this.getTotalEntradas() )- this.getTotalSalidas();
   }
 
   getTotalVentas(): number {
-    return this.sales.length;
+       return this.resumenGeneral?.cantidad_ventas || 0;
+
   }
 
   // Métodos para filtros de fecha
@@ -1318,6 +1291,9 @@ export class AdminComponent implements OnInit {
   navigateToUsers(): void {
     this.router.navigate(['/admin/users']);
   }
+  navigateToCierreCaja(): void {
+    this.router.navigate(['/cierre-caja']);
+  }
 
   // ===== MÉTODOS PARA MODAL DE FACTORES POR SUCURSAL =====
 
@@ -1482,25 +1458,7 @@ export class AdminComponent implements OnInit {
 
   // Método para obtener resumen de ventas por número
   getNumbersSummary(): Array<{ numero: number, totalVendido: number, cantidadVentas: number, porcentaje: number }> {
-    // Usar caché si está disponible y válido
-    if (this.isCacheValid() && this.cachedNumbersData) {
-      const totalGeneral = this.cachedNumbersData.get('total') || 0;
-      const result: Array<{ numero: number, totalVendido: number, cantidadVentas: number, porcentaje: number }> = [];
-
-      this.cachedNumbersData.forEach((value: any, key: string) => {
-        if (key !== 'total' && typeof value === 'object' && value.totalVendido !== undefined) {
-          result.push({
-            numero: parseInt(key),
-            totalVendido: value.totalVendido,
-            cantidadVentas: value.cantidadVentas,
-            porcentaje: totalGeneral > 0 ? (value.totalVendido / totalGeneral) * 100 : 0
-          });
-        }
-      });
-
-      return result.sort((a, b) => b.totalVendido - a.totalVendido);
-    }
-
+ 
     // Fallback al cálculo tradicional si no hay caché
     const sales = this.sales;
     const numeroStats: { [numero: number]: { totalVendido: number, cantidadVentas: number } } = {};
@@ -1970,11 +1928,9 @@ export class AdminComponent implements OnInit {
           this.selectedSucursalForCierre
         ),
         this.supabaseService.obtenerSorteosPendientesPago(
-          this.fechaCierreSeleccionada,
           this.selectedSucursalForCierre
         ),
         this.supabaseService.obtenerMovimientosCaja(
-          this.fechaCierreSeleccionada,
           this.selectedSucursalForCierre
         ),
         this.supabaseService.obtenerCierreDiario(
