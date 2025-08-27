@@ -43,21 +43,53 @@ export class ResumenSorteosComponent implements OnInit, OnDestroy {
     const fechaStr = this.supabaseService.formatDateOnlyForSupabase(hondurasToday);
 
     try {
+      // Limpiar datos previos COMPLETAMENTE
+      this.resumenPorSorteo = {};
+      console.log('🧹 Limpiando resumenPorSorteo completamente');
+      
       for (const sorteo of this.sorteos) {
         const sorteoId = `${fechaStr}-${sorteo.name}`;
+        console.log(`🔍 Cargando resumen para sorteo: ${sorteo.name}, ID: ${sorteoId}`);
+        
         try {
           // Cargar resumen por sucursal
           const resumen = await this.supabaseService.getSorteoResumenPorSucursal(sorteoId);
-          if (resumen && resumen.length > 0) {
-            this.resumenPorSorteo[sorteo.name] = resumen;
+          console.log(`📊 Resumen RAW obtenido para ${sorteo.name}:`, resumen);
+          
+          // VALIDACIÓN ESTRICTA: Solo aceptar arrays con datos válidos
+          if (Array.isArray(resumen) && resumen.length > 0) {
+            // Verificar que los datos son específicos para este sorteo
+            const sorteoValido = resumen.every(item => {
+              const tieneDatosBasicos = item.sucursal && 
+                                      (item.total_vendido !== undefined) && 
+                                      (item.factor_multiplicador !== undefined);
+              return tieneDatosBasicos;
+            });
+            
+            if (sorteoValido) {
+              console.log(`✅ Guardando resumen VÁLIDO para ${sorteo.name}:`, resumen);
+              // Crear una nueva entrada específica para este sorteo
+              this.resumenPorSorteo[sorteo.name] = [...resumen]; // Clonar array
+            } else {
+              console.log(`❌ Resumen inválido para ${sorteo.name}:`, resumen);
+              this.resumenPorSorteo[sorteo.name] = [];
+            }
+          } else {
+            console.log(`❌ No hay resumen válido para ${sorteo.name} (sorteo no cerrado o datos vacíos)`);
+            // Asegurar que existe pero vacío
+            this.resumenPorSorteo[sorteo.name] = [];
           }
 
           // Cargar ventas por número para este sorteo
           await this.loadVentasPorNumero(sorteo.name, fechaStr);
         } catch (error) {
-          console.error(`Error cargando resumen para ${sorteo.name}:`, error);
+          console.error(`❌ Error cargando resumen para ${sorteo.name}:`, error);
+          // Asegurar que existe entrada vacía en caso de error
+          this.resumenPorSorteo[sorteo.name] = [];
         }
       }
+      
+      console.log('📋 Estado final de resumenPorSorteo:', JSON.stringify(this.resumenPorSorteo, null, 2));
     } finally {
       this.isLoading = false;
     }
@@ -104,8 +136,41 @@ export class ResumenSorteosComponent implements OnInit, OnDestroy {
 
   // Función para obtener el número ganador de un sorteo
   getNumeroGanador(sorteoName: string): string {
+    console.log(`🎯 getNumeroGanador llamado para: ${sorteoName}`);
+    
     const resumen = this.getResumenSorteo(sorteoName);
-    return resumen.length > 0 ? resumen[0].numero_ganador || 'N/A' : 'N/A';
+    console.log(`📊 Resumen obtenido para ${sorteoName}:`, resumen);
+    
+    // Solo mostrar número ganador si el sorteo tiene resumen y está efectivamente cerrado
+    if (resumen.length === 0) {
+      console.log(`❌ No hay resumen para ${sorteoName}, retornando N/A`);
+      return 'N/A';
+    }
+    
+    // Verificar que todos los registros del resumen tengan el mismo numero_ganador
+    // Si hay inconsistencias, significa que los datos no son confiables
+    const numerosGanadores = resumen
+      .map(r => r.numero_ganador)
+      .filter(n => n !== null && n !== undefined && n !== '');
+    
+    console.log(`🔢 Números ganadores extraídos de ${sorteoName}:`, numerosGanadores);
+    
+    if (numerosGanadores.length === 0) {
+      console.log(`❌ No hay números ganadores válidos para ${sorteoName}, retornando N/A`);
+      return 'N/A';
+    }
+    
+    // Verificar que todos los números ganadores son iguales
+    const numeroUnico = numerosGanadores[0];
+    const todosIguales = numerosGanadores.every(n => n === numeroUnico);
+    
+    if (!todosIguales) {
+      console.warn(`⚠️ Inconsistencia en números ganadores para ${sorteoName}:`, numerosGanadores);
+      return 'N/A';
+    }
+    
+    console.log(`✅ Número ganador válido para ${sorteoName}: ${numeroUnico}`);
+    return numeroUnico || 'N/A';
   }
 
   // Función para obtener el factor más común

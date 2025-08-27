@@ -155,19 +155,34 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         if (!sucursal && sucursal == '') return;
 
         try {
-            // Verificar si ya existe un cierre para hoy
-            this.cierreExistente = await this.supabaseService.obtenerCierreDiario(
-                this.fechaHoy,
-                sucursal
-            );
-            this.yaCerrado = !!this.cierreExistente;
-
-            // Cargar resumen de caja
+            // Cargar resumen de caja (esto ya maneja la lógica "desde último cierre")
             this.resumenCaja = await this.supabaseService.calcularResumenCajaDiario(
                 this.fechaHoy,
                 sucursal
             );
-            console.log(this.resumenCaja)
+            console.log('Resumen de caja desde último cierre:', this.resumenCaja);
+
+            // Verificar si se puede realizar un nuevo cierre basándose en actividad
+            // Si el balance_final es > 0 o hay movimientos, significa que hay actividad desde el último cierre
+            const hayActividad = this.resumenCaja && (
+                this.resumenCaja.total_vendido > 0 || 
+                this.resumenCaja.total_pagado > 0 || 
+                this.resumenCaja.movimientos_entrada > 0 || 
+                this.resumenCaja.movimientos_salida > 0
+            );
+
+            // Obtener el último cierre realizado (para reimpresión)
+            this.cierreExistente = await this.supabaseService.obtenerUltimoCierreDiario(sucursal);
+            
+            // Solo bloquear si no hay actividad desde el último cierre
+            this.yaCerrado = !hayActividad;
+
+            console.log('Estado del cierre:', {
+                hayActividad,
+                yaCerrado: this.yaCerrado,
+                ultimoCierre: this.cierreExistente?.createdAt,
+                resumen: this.resumenCaja
+            });
 
             // Cargar sorteos pendientes de pago
             this.sorteosPendientesPago = await this.supabaseService.obtenerSorteosPendientesPago(
