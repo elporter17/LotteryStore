@@ -260,7 +260,7 @@
               <div class="sorteo-info">
                 <h5>{{ sorteo.label }}</h5>
                 <p>🕐 Cierre: {{ sorteo.closeTime }}</p>
-                <p>🕐 Apertura: {{ sorteo.openTime }}</p>
+                <p>🎯 Factor por defecto: {{ sorteo.defaultFactor }}x</p>
               </div>
               <div class="sorteo-status">
                 <span class="status-badge" [class.open]="isSorteoOpen(sorteo)" [class.closed]="!isSorteoOpen(sorteo)">

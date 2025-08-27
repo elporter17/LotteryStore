@@ -551,21 +551,59 @@ export class SupabaseService {
     }
   }
   async getSorteoResumenPorSucursal(sorteoId: string): Promise<any[]> {
+    console.log(`🔍 getSorteoResumenPorSucursal llamado con sorteoId: ${sorteoId}`);
+    
     try {
       const { data, error } = await this.supabase
         .from('sorteos')
         .select('sucursal, numero_ganador, factor_multiplicador, total_vendido, total_pagado, ganancia_neta')
         .eq('id', sorteoId)
+        .not('numero_ganador', 'is', null)  // Solo sorteos con número ganador
         .order('sucursal');
 
-      console.log(`Obteniendo resumen por sucursal para sorteo: ${sorteoId}`, data, error);
+      console.log(`📊 Consulta SQL resultado para ${sorteoId}:`, { data, error });
+      
       if (error) {
-        console.error('Error al obtener resumen por sucursal:', error);
+        if (error.code === 'PGRST116') {
+          // No hay datos (sorteo no cerrado)
+          console.log(`✅ Sorteo ${sorteoId} no está cerrado aún (PGRST116)`);
+          return [];
+        }
+        console.error('❌ Error al obtener resumen por sucursal:', error);
         return [];
       }
 
+      if (!data || data.length === 0) {
+        console.log(`✅ Sorteo ${sorteoId} no tiene datos (array vacío)`);
+        return [];
+      }
+
+      console.log(`📋 Datos encontrados para ${sorteoId}:`, data);
+
+      // Verificar que todos los registros tengan el mismo número ganador
+      const numerosGanadores = data
+        .map(d => d.numero_ganador)
+        .filter(n => n !== null && n !== undefined && n !== '');
+      
+      console.log(`🔢 Números ganadores encontrados:`, numerosGanadores);
+      
+      if (numerosGanadores.length === 0) {
+        console.log(`❌ Sorteo ${sorteoId} no tiene números ganadores válidos`);
+        return [];
+      }
+      
+      const numeroUnico = numerosGanadores[0];
+      const todosIguales = numerosGanadores.every(n => n === numeroUnico);
+      
+      if (!todosIguales) {
+        console.warn(`⚠️ Inconsistencia en números ganadores para ${sorteoId}:`, numerosGanadores);
+        return [];
+      }
+
+      console.log(`✅ Número ganador consistente para ${sorteoId}: ${numeroUnico}`);
+
       // Enriquecer datos con cantidad del número ganador
-      const enrichedData = await Promise.all((data || []).map(async (sorteo) => {
+      const enrichedData = await Promise.all(data.map(async (sorteo) => {
         const cantidadNumeroGanador = await this.getCantidadNumeroGanadorPorSucursal(
           sorteoId,
           sorteo.sucursal,
@@ -578,9 +616,10 @@ export class SupabaseService {
         };
       }));
 
+      console.log(`🎯 Datos enriquecidos para ${sorteoId}:`, enrichedData);
       return enrichedData;
     } catch (error) {
-      console.error('Error al obtener resumen por sucursal:', error);
+      console.error('💥 Error inesperado al obtener resumen por sucursal:', error);
       return [];
     }
   }
@@ -2667,7 +2706,7 @@ export class SupabaseService {
       // Usar la función SQL creada para calcular el resumen
       const { data, error } = await this.supabase
         .rpc('fn_resumen_general');
-      console.log('Resultado de la función fn_resumen_cierre_actual_desde_ultimo_cierre:', data, error);
+      console.log('Resultado de la función fn_resumen_general:', data, error);
 
       if (error) throw error;
 
@@ -2694,6 +2733,173 @@ export class SupabaseService {
       };
     } catch (error) {
       console.error('Error al calcular resumen de caja diario:', error);
+      // Fallback: usar método manual para el día actual
+      return await this.calcularResumenCajaDiaActual();
+    }
+  }
+
+  // Nuevo método para calcular resumen del día actual
+  async calcularResumenCajaDiaActual(): Promise<any> {
+    try {
+      const hoy = this.getHondurasDateTime();
+      const startOfDay = this.getStartOfDayHonduras(hoy);
+      const endOfDay = this.getEndOfDayHonduras(hoy);
+
+      // Calcular total vendido del día
+      const { data: salesData, error: salesError } = await this.supabase
+        .from('sales')
+        .select('total')
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+
+      if (salesError) throw salesError;
+
+      const totalVendido = (salesData || []).reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+
+      // Calcular movimientos de caja del día
+      const { data: movimientosData, error: movimientosError } = await this.supabase
+        .from('movimientos_caja')
+        .select('tipo, monto')
+        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
+        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+
+      if (movimientosError) throw movimientosError;
+
+      let movimientosEntrada = 0;
+      let movimientosSalida = 0;
+      let totalPagado = 0;
+
+      (movimientosData || []).forEach(mov => {
+        const monto = parseFloat(mov.monto);
+        if (mov.tipo === 'entrada') {
+          movimientosEntrada += monto;
+        } else if (mov.tipo === 'salida') {
+          movimientosSalida += monto;
+          // Solo contar como pago de sorteo si es una salida
+          totalPagado += monto;
+        }
+      });
+
+      const totalNeto = totalVendido - totalPagado;
+      const balanceFinal = totalNeto + movimientosEntrada - movimientosSalida;
+
+      return {
+        total_vendido: totalVendido,
+        total_pagado: totalPagado,
+        total_neto: totalNeto,
+        movimientos_entrada: movimientosEntrada,
+        movimientos_salida: movimientosSalida,
+        balance_final: balanceFinal,
+        cantidad_ventas: salesData?.length || 0
+      };
+    } catch (error) {
+      console.error('Error al calcular resumen del día actual:', error);
+      return {
+        total_vendido: 0,
+        total_pagado: 0,
+        total_neto: 0,
+        movimientos_entrada: 0,
+        movimientos_salida: 0,
+        balance_final: 0,
+        cantidad_ventas: 0
+      };
+    }
+  }
+
+  // Método para obtener ventas por sorteo del día actual
+  async getVentasPorSorteoDelDia(): Promise<any> {
+    try {
+      const hoy = this.getHondurasDateTime();
+      const fechaStr = this.formatDateOnlyForSupabase(hoy);
+
+      const { data, error } = await this.supabase
+        .from('sales')
+        .select(`
+          sorteo,
+          sucursal,
+          total,
+          sale_details!inner(numero, monto)
+        `)
+        .gte('fecha', `${fechaStr} 00:00:00`)
+        .lte('fecha', `${fechaStr} 23:59:59`);
+
+      if (error) throw error;
+
+      const ventasPorSorteo: any = {};
+
+      (data || []).forEach(sale => {
+        if (!ventasPorSorteo[sale.sorteo]) {
+          ventasPorSorteo[sale.sorteo] = {
+            totalVendido: 0,
+            cantidadVentas: 0,
+            sucursales: {}
+          };
+        }
+
+        ventasPorSorteo[sale.sorteo].totalVendido += parseFloat(sale.total);
+        ventasPorSorteo[sale.sorteo].cantidadVentas += 1;
+
+        if (!ventasPorSorteo[sale.sorteo].sucursales[sale.sucursal]) {
+          ventasPorSorteo[sale.sorteo].sucursales[sale.sucursal] = {
+            totalVendido: 0,
+            cantidadVentas: 0
+          };
+        }
+
+        ventasPorSorteo[sale.sorteo].sucursales[sale.sucursal].totalVendido += parseFloat(sale.total);
+        ventasPorSorteo[sale.sorteo].sucursales[sale.sucursal].cantidadVentas += 1;
+      });
+
+      return ventasPorSorteo;
+    } catch (error) {
+      console.error('Error al obtener ventas por sorteo del día:', error);
+      return {};
+    }
+  }
+
+  // Método para obtener ventas por sucursal del día actual
+  async getVentasPorSucursalDelDia(): Promise<any> {
+    try {
+      const hoy = this.getHondurasDateTime();
+      const fechaStr = this.formatDateOnlyForSupabase(hoy);
+
+      const { data, error } = await this.supabase
+        .from('sales')
+        .select('sucursal, sorteo, total')
+        .gte('fecha', `${fechaStr} 00:00:00`)
+        .lte('fecha', `${fechaStr} 23:59:59`);
+
+      if (error) throw error;
+
+      const ventasPorSucursal: any = {};
+
+      (data || []).forEach(sale => {
+        if (!ventasPorSucursal[sale.sucursal]) {
+          ventasPorSucursal[sale.sucursal] = {
+            totalVendido: 0,
+            cantidadVentas: 0,
+            sorteos: {}
+          };
+        }
+
+        ventasPorSucursal[sale.sucursal].totalVendido += parseFloat(sale.total);
+        ventasPorSucursal[sale.sucursal].cantidadVentas += 1;
+
+        if (!ventasPorSucursal[sale.sucursal].sorteos[sale.sorteo]) {
+          ventasPorSucursal[sale.sucursal].sorteos[sale.sorteo] = {
+            totalVendido: 0,
+            cantidadVentas: 0
+          };
+        }
+
+        ventasPorSucursal[sale.sucursal].sorteos[sale.sorteo].totalVendido += parseFloat(sale.total);
+        ventasPorSucursal[sale.sucursal].sorteos[sale.sorteo].cantidadVentas += 1;
+      });
+
+      return ventasPorSucursal;
+    } catch (error) {
+      console.error('Error al obtener ventas por sucursal del día:', error);
+      return {};
     }
   }
 
@@ -2975,6 +3181,47 @@ export class SupabaseService {
       };
     } catch (error) {
       console.error('Error al obtener cierre diario:', error);
+      return null;
+    }
+  }
+
+  // Obtener el último cierre realizado para una sucursal (para reimpresión y validaciones)
+  async obtenerUltimoCierreDiario(sucursal: string): Promise<import('../models/interfaces').CierreDiario | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('cierres_diarios')
+        .select('*')
+        .eq('sucursal', sucursal)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No existe ningún cierre para esta sucursal
+          return null;
+        }
+        throw error;
+      }
+
+      return {
+        id: data.id,
+        fecha: new Date(data.fecha),
+        usuarioId: data.usuario_id,
+        sucursal: data.sucursal,
+        totalVendido: parseFloat(data.total_vendido),
+        totalPagado: parseFloat(data.total_pagado),
+        neto: parseFloat(data.neto),
+        efectivoReportado: parseFloat(data.efectivo_reportado),
+        diferencia: parseFloat(data.diferencia),
+        notas: data.notas,
+        sorteosMañana: data.sorteos_manana,
+        sorteosTarde: data.sorteos_tarde,
+        sorteosNoche: data.sorteos_noche,
+        createdAt: new Date(data.created_at)
+      };
+    } catch (error) {
+      console.error('Error al obtener último cierre diario:', error);
       return null;
     }
   }
