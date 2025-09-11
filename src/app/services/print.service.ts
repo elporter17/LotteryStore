@@ -101,68 +101,31 @@ export class PrintService {
       pdf.text('Mucha suerte!', 40, y, { align: 'center' });
 
 
-      // FUNCIÓN DE IMPRESIÓN DIRECTA
-      // Crear blob para impresión
+      // FUNCIÓN DE IMPRESIÓN DIRECTA - SIN MENSAJE DE SEGURIDAD
       const pdfData = pdf.output('arraybuffer');
       const blob = new Blob([pdfData], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      const fileName = `recibo_${sale.numeroRecibo || sale.id}.pdf`;
       
+      // ESTRATEGIA: Descargar directamente en lugar de abrir en ventana
+      // Esto evita el mensaje "file can't be downloaded securely"
+      const downloadLink = document.createElement('a');
+      downloadLink.href = URL.createObjectURL(blob);
+      downloadLink.download = fileName;
+      downloadLink.style.display = 'none';
       
-      alert('antes de abrir ventana')
-      debugger
-      // Abrir en nueva ventana para impresión manual controlada por el usuario
-      const printWindow = window.open(url, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+      // Agregar al DOM y hacer clic automáticamente
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
       
-      alert('antes de if')
-      if (printWindow) {
-        alert('principal')
-        printWindow.onload = () => {
-          // Enfocar la ventana
-          printWindow.focus();
-          
-          // Ejecutar impresión automáticamente
-          setTimeout(() => {
-            try {
-              alert('imprimiendo 1')
-              printWindow.print();
-            } catch (printError) {
-              alert('Error al imprimir: ' );
-            }
-          }, 1000); // Esperar 1 segundo para que cargue completamente
-          
-          // Limpiar URL cuando la ventana se cierre (detección manual)
-          const checkClosed = setInterval(() => {
-            if (printWindow.closed) {
-              clearInterval(checkClosed);
-              URL.revokeObjectURL(url);
-            }
-          }, 1000);
-        };
-      } else {
-        
-        alert('else  entrando')
-        // Fallback: usar iframe como respaldo
-        const printFrame = document.createElement('iframe');
-        printFrame.style.display = 'none';
-        printFrame.src = url;
-        
-        document.body.appendChild(printFrame);
-        
-        printFrame.onload = () => {
-          try {
-            printFrame.contentWindow?.focus();
-            printFrame.contentWindow?.print();
-            
-            // Limpiar después de 5 segundos en modo iframe
-            setTimeout(() => {
-              document.body.removeChild(printFrame);
-              URL.revokeObjectURL(url);
-            }, 5000);
-            
-          } catch (printError) {
-          }
-        };
-      }
+      // Limpiar inmediatamente
+      document.body.removeChild(downloadLink);
+      
+      // Revocar el URL después de un breve delay
+      setTimeout(() => {
+        URL.revokeObjectURL(downloadLink.href);
+      }, 1000);
+      
+     
 
     } catch (error: any) {
       alert('Error al generar el recibo: ' + (error?.message || error));
@@ -190,6 +153,99 @@ export class PrintService {
     ];
 
     this.generateThermalReceipt(testSale, testDetails);
+  }
+
+  // Método alternativo con enfoque de Data URL (más compatible)
+  generateThermalReceiptDataURL(sale: Sale, details: SaleDetail[]): void {
+    // Si no hay detalles, crear datos de prueba
+    if (!details || details.length === 0) {
+      details = [
+        { id: 'test1', saleId: sale.id, numero: 11, monto: 40 },
+        { id: 'test2', saleId: sale.id, numero: 54, monto: 10 }
+      ];
+    }
+
+    try {
+      // Crear PDF (mismo código que antes)
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [80, 150]
+      });
+
+      let y = 10;
+      const lineHeight = 5;
+
+      pdf.setFontSize(10);
+      pdf.text('RECIBO DE VENTA', 40, y, { align: 'center' });
+      y += lineHeight + 2;
+
+      pdf.setFontSize(9);
+      pdf.text(`Recibo #: ${sale.numeroRecibo || 'N/A'}`, 40, y, { align: 'center' });
+      y += lineHeight;
+
+      pdf.line(5, y, 75, y);
+      y += lineHeight;
+
+      pdf.setFontSize(12);
+      pdf.text(sale.sucursal || 'Sucursal 1', 40, y, { align: 'center' });
+      y += lineHeight;
+
+      pdf.setFontSize(9);
+      pdf.text(`Sorteo: ${sale.sorteo}`, 40, y, { align: 'center' });
+      y += lineHeight;
+
+      const fecha = new Date(sale.fecha).toLocaleString();
+      pdf.text(`Fecha: ${fecha}`, 40, y, { align: 'center' });
+      y += lineHeight + 2;
+
+      pdf.setFontSize(10);
+      pdf.text('Numero', 20, y, { align: 'center' });
+      pdf.text('Valor', 60, y, { align: 'center' });
+      y += lineHeight;
+
+      pdf.line(5, y, 75, y);
+      y += lineHeight;
+
+      let total = 0;
+      for (const detail of details) {
+        pdf.text(detail.numero.toString().padStart(2, '0'), 20, y, { align: 'center' });
+        pdf.text(`L ${detail.monto}`, 60, y, { align: 'center' });
+        total += detail.monto;
+        y += lineHeight;
+      }
+
+      y += 2;
+      pdf.line(5, y, 75, y);
+      y += lineHeight;
+
+      pdf.setFontSize(12);
+      pdf.text('Total a pagar:', 10, y);
+      pdf.text(`L ${total}`, 70, y, { align: 'right' });
+      y += lineHeight + 2;
+
+      pdf.setFontSize(8);
+      pdf.text('Gracias por su compra!', 40, y, { align: 'center' });
+      y += lineHeight;
+      pdf.text('Mucha suerte!', 40, y, { align: 'center' });
+
+      // MÉTODO CON DATA URL - Más seguro que blob URLs
+      const pdfDataUri = pdf.output('datauristring');
+      const fileName = `recibo_${sale.numeroRecibo || sale.id}.pdf`;
+      
+      // Crear link con data URL
+      const downloadLink = document.createElement('a');
+      downloadLink.href = pdfDataUri;
+      downloadLink.download = fileName;
+      downloadLink.style.display = 'none';
+      
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
+    } catch (error: any) {
+      alert('Error al generar el recibo: ' + (error?.message || error));
+    }
   }
 
   // Generar PDF de reporte diario
