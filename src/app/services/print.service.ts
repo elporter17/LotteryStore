@@ -101,65 +101,127 @@ export class PrintService {
       pdf.text('Mucha suerte!', 40, y, { align: 'center' });
 
 
-      // FUNCIÓN DE IMPRESIÓN DIRECTA
+      // FUNCIÓN DE IMPRESIÓN DIRECTA MEJORADA PARA TABLETS
       // Crear blob para impresión
       const pdfData = pdf.output('arraybuffer');
       const blob = new Blob([pdfData], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       
+      // Detectar si es dispositivo móvil/tablet
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isTablet = /iPad|Android(?=.*\bMobile\b)|Android(?=.*\bTablet\b)/i.test(navigator.userAgent);
       
-      // Abrir en nueva ventana para impresión manual controlada por el usuario
-      const printWindow = window.open(url, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+      console.log('Dispositivo detectado - Mobile:', isMobile, 'Tablet:', isTablet);
       
-      if (printWindow) {
-        printWindow.onload = () => {
-          // Enfocar la ventana
-          printWindow.focus();
+      if (isMobile || isTablet) {
+        // ESTRATEGIA PARA TABLETS Y MÓVILES
+        console.log('Aplicando estrategia de impresión para tablet/móvil');
+        
+        // Opción 1: Intentar usar Web Share API si está disponible
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'recibo.pdf', { type: 'application/pdf' })] })) {
+          const file = new File([blob], `recibo-${sale.numeroRecibo || Date.now()}.pdf`, { type: 'application/pdf' });
           
-          // Ejecutar impresión automáticamente
+          navigator.share({
+            title: 'Recibo de Venta',
+            text: `Recibo de venta #${sale.numeroRecibo || 'N/A'}`,
+            files: [file]
+          }).then(() => {
+            console.log('Recibo compartido exitosamente');
+            URL.revokeObjectURL(url);
+          }).catch((error) => {
+            console.warn('Error compartiendo:', error);
+            // Fallback a descarga directa
+            this.forceDownloadPDF(blob, `recibo-${sale.numeroRecibo || Date.now()}.pdf`);
+            URL.revokeObjectURL(url);
+          });
+        } else {
+          // Opción 2: Forzar descarga del PDF para que el usuario pueda imprimirlo
+          console.log('Forzando descarga de PDF');
+          this.forceDownloadPDF(blob, `recibo-${sale.numeroRecibo || Date.now()}.pdf`);
+          
+          // Mostrar instrucciones al usuario
           setTimeout(() => {
-            try {
-              printWindow.print();
-            } catch (printError) {
-            }
-          }, 1000); // Esperar 1 segundo para que cargue completamente
+            alert('📱 TABLET/MÓVIL DETECTADO:\n\n1. El recibo se ha descargado\n2. Ábrelo desde Descargas\n3. Usa "Compartir" → "Imprimir"\n4. Selecciona tu impresora\n\n✅ El archivo está listo para imprimir');
+          }, 500);
           
-          // Limpiar URL cuando la ventana se cierre (detección manual)
-          const checkClosed = setInterval(() => {
-            if (printWindow.closed) {
-              clearInterval(checkClosed);
-              URL.revokeObjectURL(url);
-            }
-          }, 1000);
-        };
+          URL.revokeObjectURL(url);
+        }
       } else {
+        // ESTRATEGIA PARA DESKTOP (comportamiento original)
+        console.log('Aplicando estrategia de impresión para desktop');
         
-        // Fallback: usar iframe como respaldo
-        const printFrame = document.createElement('iframe');
-        printFrame.style.display = 'none';
-        printFrame.src = url;
+        // Abrir en nueva ventana para impresión manual controlada por el usuario
+        const printWindow = window.open(url, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
         
-        document.body.appendChild(printFrame);
-        
-        printFrame.onload = () => {
-          try {
-            printFrame.contentWindow?.focus();
-            printFrame.contentWindow?.print();
+        if (printWindow) {
+          printWindow.onload = () => {
+            // Enfocar la ventana
+            printWindow.focus();
             
-            // Limpiar después de 5 segundos en modo iframe
+            // Ejecutar impresión automáticamente
             setTimeout(() => {
-              document.body.removeChild(printFrame);
-              URL.revokeObjectURL(url);
-            }, 5000);
+              try {
+                printWindow.print();
+              } catch (printError) {
+                console.warn('Error en window.print():', printError);
+              }
+            }, 1000); // Esperar 1 segundo para que cargue completamente
             
-          } catch (printError) {
-          }
-        };
+            // Limpiar URL cuando la ventana se cierre (detección manual)
+            const checkClosed = setInterval(() => {
+              if (printWindow.closed) {
+                clearInterval(checkClosed);
+                URL.revokeObjectURL(url);
+              }
+            }, 1000);
+          };
+        } else {
+          // Fallback: usar iframe como respaldo
+          const printFrame = document.createElement('iframe');
+          printFrame.style.display = 'none';
+          printFrame.src = url;
+          
+          document.body.appendChild(printFrame);
+          
+          printFrame.onload = () => {
+            try {
+              printFrame.contentWindow?.focus();
+              printFrame.contentWindow?.print();
+              
+              // Limpiar después de 5 segundos en modo iframe
+              setTimeout(() => {
+                document.body.removeChild(printFrame);
+                URL.revokeObjectURL(url);
+              }, 5000);
+              
+            } catch (printError) {
+              console.warn('Error en iframe print:', printError);
+            }
+          };
+        }
       }
 
     } catch (error: any) {
       alert('Error al generar el recibo: ' + (error?.message || error));
     }
+  }
+
+  // Método auxiliar para forzar descarga de PDF en dispositivos móviles
+  private forceDownloadPDF(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Limpiar URL después de un tiempo
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
   }
 
   // Método de prueba para generar un recibo con datos fijos

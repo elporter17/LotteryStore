@@ -372,6 +372,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
       this.printService.generateThermalReceipt(saleWithId, saleDetails);
 
+      // Detectar dispositivo para mensaje personalizado
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isTablet = /iPad|Android(?=.*\bMobile\b)|Android(?=.*\bTablet\b)/i.test(navigator.userAgent);
+
       // Actualizar datos localmente primero para mostrar cambios inmediatos
       this.updateLocalSorteoData(this.currentSorteo.name, this.selectedNumbers);
 
@@ -397,7 +401,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges(); // Forzar actualización después de cargar datos
       }, 100); // Pequeño retraso para evitar conflictos con la ventana de impresión
 
-      this.notificationService.showSuccess('Venta procesada e impresa exitosamente');
+      // Mensaje de éxito personalizado según dispositivo
+      if (isMobile || isTablet) {
+        this.notificationService.showSuccess('✅ Venta procesada! 📱 Recibo descargado para imprimir desde tablet');
+      } else {
+        this.notificationService.showSuccess('Venta procesada e impresa exitosamente');
+      }
     } catch (error) {
       this.notificationService.showError('Error al procesar la venta');
     } finally {
@@ -827,7 +836,15 @@ export class SucursalComponent implements OnInit, OnDestroy {
       // Generar recibo con los detalles obtenidos
       this.printService.generateThermalReceipt(sale, details);
 
-      this.notificationService.showSuccess('Recibo reimpreso', `Recibo #${sale.numeroRecibo || sale.id} enviado a impresora`);
+      // Detectar dispositivo para mensaje personalizado
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isTablet = /iPad|Android(?=.*\bMobile\b)|Android(?=.*\bTablet\b)/i.test(navigator.userAgent);
+
+      if (isMobile || isTablet) {
+        this.notificationService.showSuccess('📱 Recibo descargado', `Recibo #${sale.numeroRecibo || sale.id} listo para imprimir desde tablet`);
+      } else {
+        this.notificationService.showSuccess('Recibo reimpreso', `Recibo #${sale.numeroRecibo || sale.id} enviado a impresora`);
+      }
 
     } catch (error) {
       this.notificationService.showError('Error de reimpresión', 'Error al reimprimir el recibo. Por favor intente nuevamente.');
