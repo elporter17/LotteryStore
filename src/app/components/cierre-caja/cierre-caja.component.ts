@@ -23,6 +23,8 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
     // Estado del cierre
     cierreExistente: CierreDiario | null = null;
     yaCerrado = false;
+    fechaUltimoCierre: Date | null = null;
+    tieneActividad = false;
 
     sucursalesDisponibles: string[] = [];
 
@@ -102,6 +104,46 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         this.subscriptions.forEach(sub => sub.unsubscribe());
     }
 
+    // Método para obtener información del período desde último cierre
+    getPeriodoInfo(): string {
+        if (!this.fechaUltimoCierre) {
+            return 'Desde inicio del día';
+        }
+        
+        const ahora = new Date();
+        const diferencia = ahora.getTime() - this.fechaUltimoCierre.getTime();
+        const horas = Math.floor(diferencia / (1000 * 60 * 60));
+        const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
+        
+        const fechaFormateada = this.fechaUltimoCierre.toLocaleDateString('es-HN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+        
+        const horaFormateada = this.fechaUltimoCierre.toLocaleTimeString('es-HN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        
+        if (horas === 0) {
+            return `Desde último cierre (${fechaFormateada} ${horaFormateada}) - ${minutos} minutos`;
+        } else {
+            return `Desde último cierre (${fechaFormateada} ${horaFormateada}) - ${horas}h ${minutos}m`;
+        }
+    }
+
+    // Método para verificar si hay actividad suficiente para un cierre
+    hayActividadParaCierre(): boolean {
+        return this.tieneActividad && this.resumenCaja && (
+            this.resumenCaja.total_vendido > 0 || 
+            this.resumenCaja.total_pagado > 0 || 
+            this.resumenCaja.movimientos_entrada > 0 || 
+            this.resumenCaja.movimientos_salida > 0
+        );
+    }
+
 
     private async cargarSucursalesDisponibles(): Promise<void> {
         try {
@@ -155,15 +197,27 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
         if (!sucursal && sucursal == '') return;
 
         try {
-            // Cargar resumen de caja (esto ya maneja la lógica "desde último cierre")
+            // Cargar resumen de caja desde último cierre usando la nueva función
             this.resumenCaja = await this.supabaseService.calcularResumenCajaDiario(
                 this.fechaHoy,
                 sucursal
             );
             console.log('Resumen de caja desde último cierre:', this.resumenCaja);
 
+            // Extraer información adicional del resumen si está disponible
+            if (this.resumenCaja) {
+                this.fechaUltimoCierre = this.resumenCaja.fecha_ultimo_cierre ? 
+                    new Date(this.resumenCaja.fecha_ultimo_cierre) : null;
+                this.tieneActividad = this.resumenCaja.tiene_actividad || false;
+            }
+
+            // Si no tenemos fecha desde el resumen, intentar obtenerla del último cierre registrado
+            if (!this.fechaUltimoCierre) {
+                const ultimoCierre = await this.supabaseService.obtenerUltimoCierreDiario(sucursal);
+                this.fechaUltimoCierre = ultimoCierre?.createdAt || null;
+            }
+
             // Verificar si se puede realizar un nuevo cierre basándose en actividad
-            // Si el balance_final es > 0 o hay movimientos, significa que hay actividad desde el último cierre
             const hayActividad = this.resumenCaja && (
                 this.resumenCaja.total_vendido > 0 || 
                 this.resumenCaja.total_pagado > 0 || 
@@ -171,7 +225,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
                 this.resumenCaja.movimientos_salida > 0
             );
 
-            // Obtener el último cierre realizado (para reimpresión)
+            // Obtener el último cierre realizado (para reimpresión y validaciones)
             this.cierreExistente = await this.supabaseService.obtenerUltimoCierreDiario(sucursal);
             
             // Solo bloquear si no hay actividad desde el último cierre
@@ -179,17 +233,19 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
             console.log('Estado del cierre:', {
                 hayActividad,
+                tieneActividad: this.tieneActividad,
                 yaCerrado: this.yaCerrado,
                 ultimoCierre: this.cierreExistente?.createdAt,
+                fechaUltimoCierre: this.fechaUltimoCierre,
                 resumen: this.resumenCaja
             });
 
-            // Cargar sorteos pendientes de pago
+            // Cargar sorteos pendientes de pago desde último cierre
             this.sorteosPendientesPago = await this.supabaseService.obtenerSorteosPendientesPago(
                 sucursal
             );
 
-            // Cargar movimientos del día
+            // Cargar movimientos desde último cierre
             this.movimientosDelDia = await this.supabaseService.obtenerMovimientosCaja(
                 sucursal
             );
@@ -508,6 +564,9 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             console.log('Datos del cierre a registrar:', cierre);
 
             await this.supabaseService.registrarCierreDiario(cierre);
+
+            // Actualizar la fecha del último cierre para reflejar el cierre recién realizado
+            this.fechaUltimoCierre = new Date();
 
             this.notificationService.showSuccess('Cierre diario registrado exitosamente');
 

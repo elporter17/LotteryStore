@@ -147,18 +147,37 @@ export class SucursalComponent implements OnInit, OnDestroy {
       await this.updateSorteoInfo();
       this.setFilterDate();
 
-      // Limpiar timer anterior si existe
+      // Limpiar timers anteriores si existen
       if (this.sorteoUpdateInterval) {
         clearInterval(this.sorteoUpdateInterval);
       }
 
-      // Actualizar cada minuto - usar método que se puede limpiar
+      // Contador para controlar las actualizaciones menos frecuentes
+      let updateCounter = 0;
+
+      // Actualizar cada 500ms la información básica de sorteos
       this.sorteoUpdateInterval = setInterval(async () => {
         await this.updateSorteoInfo();
+        updateCounter++;
+        
+        // Cada 30 segundos (60 iteraciones de 500ms), actualizar datos de ventas
+        if (updateCounter % 60 === 0) {
+          await this.loadAllSorteoData();
+        }
+        
+        // Cada 10 segundos (20 iteraciones de 500ms), verificar sorteos cerrados
+        if (updateCounter % 20 === 0) {
+          const fecha = new Date(this.filterDate + 'T00:00:00');
+          await this.loadSorteosCerrados(fecha);
+        }
       }, 500);
 
       // Cargar datos iniciales de todos los tabs
       await this.loadAllSorteoData();
+
+      // Cargar información inicial de sorteos cerrados
+      const fecha = new Date(this.filterDate + 'T00:00:00');
+      await this.loadSorteosCerrados(fecha);
 
     } catch (error) {
       this.notificationService.showError('Error al cargar los datos');
@@ -177,8 +196,13 @@ export class SucursalComponent implements OnInit, OnDestroy {
   }
 
 
-  onFilterDateChange(): void {
+  async onFilterDateChange(): Promise<void> {
     this.filterSales();
+    // Recargar datos de sorteos para la nueva fecha
+    await this.loadAllSorteoData();
+    // Cargar sorteos cerrados para la nueva fecha
+    const fecha = new Date(this.filterDate + 'T00:00:00');
+    await this.loadSorteosCerrados(fecha);
   }
 
   filterSales(): void {
@@ -348,6 +372,9 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
       this.printService.generateThermalReceipt(saleWithId, saleDetails);
 
+      // Actualizar datos localmente primero para mostrar cambios inmediatos
+      this.updateLocalSorteoData(this.currentSorteo.name, this.selectedNumbers);
+
       // Limpiar selección inmediatamente después de enviar a imprimir
       setTimeout(async () => {
         // Limpiar selección inmediatamente
@@ -364,7 +391,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
         this.cdr.detectChanges(); // Forzar actualización visual inmediata
 
-        // Recargar datos de sorteos para mostrar la venta recién realizada
+        // Recargar datos de sorteos para asegurar sincronización con la base de datos
         await this.loadAllSorteoData();
 
         this.cdr.detectChanges(); // Forzar actualización después de cargar datos
@@ -854,14 +881,14 @@ Revisa la consola para más detalles.`);
       const fecha = new Date(this.filterDate + 'T00:00:00');
       const sucursal = this.currentUser?.sucursal || 'Sucursal 1';
 
-      // Inicializar estructura
+      // Inicializar estructura con los nombres correctos de propiedades
       this.sorteoData = {
-        mañana: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
-        tarde: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 },
-        noche: { totalVendido: 0, numerosVendidos: {}, numeroGanador: null, totalPagar: 0, factor: 70 }
+        mañana: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} },
+        tarde: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} },
+        noche: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} }
       };
 
-      // Ahora sí cargamos con la fecha filtrada
+      // Cargar datos con la fecha filtrada
       await this.loadSorteoDataOptimized(fecha, sucursal);
 
       // Determinar y mostrar el tab activo
@@ -946,36 +973,167 @@ Revisa la consola para más detalles.`);
       const formattedDate = this.supabaseService.formatLocalDateForSupabase(fecha);
       console.log(sucursal, 'Sucursal para consulta:', sucursal);
 
-        console.log('Fecha formateada para consulta:', formattedDate);
-      const { data, error } = await this.supabaseService.client
+      console.log('Fecha formateada para consulta:', formattedDate);
+      
+      // Primera opción: intentar desde la vista
+      let { data, error } = await this.supabaseService.client
         .from('resumen_ventas_sorteos_x_sucursal_diario_2')
         .select('*')
         .eq('fecha', formattedDate)
         .eq('sucursal', sucursal);
 
-        console.log('Consulta a vista ejecutada:', { data });
-      if (error) {
-        console.error('Error al obtener datos desde la vista:', error);
+      console.log('Consulta a vista ejecutada:', { data, error });
+      
+      // Si la vista no existe o falla, usar consulta directa
+      if (error || !data || data.length === 0) {
+        console.log('Vista no disponible, usando consulta directa...');
+        await this.loadSorteoDataDirect(fecha, sucursal);
         return;
       }
 
       console.log('Datos obtenidos desde la vista:', data);
 
+      // Inicializar estructura
       this.sorteoData = {
-        mañana: { montoVendido: 0, total: 0, ganador: null },
-        tarde: { montoVendido: 0, total: 0, ganador: null },
-        noche: { montoVendido: 0, total: 0, ganador: null }
+        mañana: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} },
+        tarde: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} },
+        noche: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} }
       };
 
+      // Procesar datos de la vista
       data.forEach((row: any) => {
-         this.sorteoData[row.sorteo.toLowerCase() as 'mañana' | 'tarde' | 'noche'] = {
-          ...row
-        };
+        const sorteoKey = row.sorteo?.toLowerCase() as 'mañana' | 'tarde' | 'noche';
+        if (this.sorteoData[sorteoKey]) {
+          // Mapear nombres de columnas de la vista a la estructura esperada
+          this.sorteoData[sorteoKey] = {
+            total_vendido: row.total_vendido || row.monto_total || row.total || 0,
+            numero_ganador: row.numero_ganador || row.ganador || null,
+            total_a_pagar: row.total_a_pagar || row.total_pagar || 0,
+            numerosVendidos: row.numeros_vendidos || {}
+          };
+        }
       });
 
       console.log('Datos procesados y agregados desde vista:', this.sorteoData);
     } catch (error) {
       console.error('Error en loadSorteoDataOptimized:', error);
+      // Fallback a consulta directa
+      await this.loadSorteoDataDirect(fecha, sucursal);
+    }
+  }
+
+  // Método fallback para consulta directa cuando la vista no está disponible
+  private async loadSorteoDataDirect(fecha: Date, sucursal: string): Promise<void> {
+    try {
+      console.log('Cargando datos con consulta directa para fecha:', fecha, 'y sucursal:', sucursal);
+      
+      const startOfDay = new Date(fecha);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(fecha);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const startStr = this.supabaseService.formatLocalDateForSupabase(startOfDay);
+      const endStr = this.supabaseService.formatLocalDateForSupabase(endOfDay);
+      const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fecha);
+      
+      console.log('Rango de fechas para consulta directa:', startStr, 'a', endStr);
+
+      // Consulta 1: Obtener ventas del día
+      const { data: salesData, error: salesError } = await this.supabaseService.client
+        .from('sales')
+        .select(`
+          sorteo,
+          total,
+          sale_details(numero, monto)
+        `)
+        .eq('sucursal', sucursal)
+        .gte('fecha', startStr)
+        .lte('fecha', endStr);
+
+      // Consulta 2: Obtener información de sorteos cerrados con número ganador
+      const { data: sorteosData, error: sorteosError } = await this.supabaseService.client
+        .from('sorteos')
+        .select('sorteo, numero_ganador, factor_multiplicador, cerrado')
+        .like('id', `${fechaStr}-%`)
+        .not('numero_ganador', 'is', null);
+
+      if (salesError) {
+        console.error('Error en consulta de ventas:', salesError);
+      }
+
+      if (sorteosError) {
+        console.error('Error en consulta de sorteos:', sorteosError);
+      }
+
+      console.log('Datos obtenidos - Ventas:', salesData);
+      console.log('Datos obtenidos - Sorteos cerrados:', sorteosData);
+
+      // Inicializar estructura
+      this.sorteoData = {
+        mañana: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} },
+        tarde: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} },
+        noche: { total_vendido: 0, numero_ganador: null, total_a_pagar: 0, numerosVendidos: {} }
+      };
+
+      // Procesar datos de ventas
+      if (salesData?.length) {
+        console.log(`Procesando ${salesData.length} ventas...`);
+        salesData.forEach((sale: any) => {
+          let sorteoKey = sale.sorteo?.toLowerCase();
+          // Normalizar "mañana" vs "manana"
+          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          
+          if (['mañana', 'tarde', 'noche'].includes(sorteoKey) && sale.sale_details) {
+            console.log(`Procesando venta de ${sorteoKey}:`, sale);
+            
+            // Sumar total vendido
+            this.sorteoData[sorteoKey].total_vendido += sale.total || 0;
+            
+            // Agregar números vendidos
+            sale.sale_details.forEach((detail: any) => {
+              const numStr = detail.numero.toString();
+              if (!this.sorteoData[sorteoKey].numerosVendidos[numStr]) {
+                this.sorteoData[sorteoKey].numerosVendidos[numStr] = 0;
+              }
+              this.sorteoData[sorteoKey].numerosVendidos[numStr] += detail.monto;
+            });
+          }
+        });
+      } else {
+        console.log('No se encontraron ventas para la fecha y sucursal especificadas');
+      }
+
+      // Procesar información de sorteos cerrados
+      if (sorteosData?.length) {
+        console.log(`Procesando ${sorteosData.length} sorteos cerrados...`);
+        sorteosData.forEach((sorteo: any) => {
+          let sorteoKey = sorteo.sorteo?.toLowerCase();
+          // Normalizar "mañana" vs "manana"
+          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          
+          if (['mañana', 'tarde', 'noche'].includes(sorteoKey)) {
+            console.log(`Procesando sorteo cerrado de ${sorteoKey}:`, sorteo);
+            
+            // Asignar número ganador
+            this.sorteoData[sorteoKey].numero_ganador = sorteo.numero_ganador ? 
+              parseInt(sorteo.numero_ganador) : null;
+            
+            // Calcular total a pagar si hay número ganador
+            if (sorteo.numero_ganador) {
+              const numeroGanador = sorteo.numero_ganador.toString();
+              const montoVendidoNumero = this.sorteoData[sorteoKey].numerosVendidos[numeroGanador] || 0;
+              const factor = sorteo.factor_multiplicador || 70;
+              this.sorteoData[sorteoKey].total_a_pagar = montoVendidoNumero * factor;
+            }
+          }
+        });
+      } else {
+        console.log('No se encontraron sorteos cerrados para la fecha especificada');
+      }
+
+      console.log('Datos procesados de consulta directa:', this.sorteoData);
+    } catch (error) {
+      console.error('Error en loadSorteoDataDirect:', error);
     }
   }
 
@@ -1104,6 +1262,106 @@ Revisa la consola para más detalles.`);
     // Este método ya no es necesario porque cargamos todo de una vez
     // Lo mantenemos por compatibilidad pero no hace nada
     return;
+  }
+
+  // Método para actualizar datos localmente después de una venta
+  private updateLocalSorteoData(sorteo: string, numerosVendidos: { numero: number, monto: number }[]): void {
+    const sorteoKey = sorteo.toLowerCase() as 'mañana' | 'tarde' | 'noche';
+    
+    if (!this.sorteoData[sorteoKey]) {
+      // Inicializar si no existe
+      this.sorteoData[sorteoKey] = { 
+        total_vendido: 0, 
+        numero_ganador: null, 
+        total_a_pagar: 0, 
+        numerosVendidos: {} 
+      };
+    }
+
+    let totalVenta = 0;
+    numerosVendidos.forEach(item => {
+      totalVenta += item.monto;
+      
+      // Actualizar números vendidos
+      const numStr = item.numero.toString();
+      if (!this.sorteoData[sorteoKey].numerosVendidos[numStr]) {
+        this.sorteoData[sorteoKey].numerosVendidos[numStr] = 0;
+      }
+      this.sorteoData[sorteoKey].numerosVendidos[numStr] += item.monto;
+    });
+
+    // Actualizar total vendido
+    this.sorteoData[sorteoKey].total_vendido += totalVenta;
+    
+    // Recalcular total a pagar si hay número ganador
+    if (this.sorteoData[sorteoKey].numero_ganador !== null) {
+      const numeroGanador = this.sorteoData[sorteoKey].numero_ganador!.toString();
+      const montoVendidoNumero = this.sorteoData[sorteoKey].numerosVendidos[numeroGanador] || 0;
+      const factor = 70; // Factor por defecto
+      this.sorteoData[sorteoKey].total_a_pagar = montoVendidoNumero * factor;
+    }
+    
+    console.log(`Datos actualizados localmente para ${sorteoKey}:`, this.sorteoData[sorteoKey]);
+  }
+
+  // Método para cargar información de sorteos cerrados
+  private async loadSorteosCerrados(fecha: Date): Promise<void> {
+    try {
+      const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fecha);
+      
+      console.log('Cargando sorteos cerrados para fecha:', fechaStr);
+      
+      const { data: sorteosData, error } = await this.supabaseService.client
+        .from('sorteos')
+        .select('sorteo, numero_ganador, factor_multiplicador, cerrado')
+        .like('id', `${fechaStr}-%`)
+        .not('numero_ganador', 'is', null);
+
+      if (error) {
+        console.error('Error al cargar sorteos cerrados:', error);
+        return;
+      }
+
+      console.log('Sorteos cerrados encontrados:', sorteosData);
+
+      // Actualizar información de sorteos cerrados
+      if (sorteosData?.length) {
+        sorteosData.forEach((sorteo: any) => {
+          let sorteoKey = sorteo.sorteo?.toLowerCase();
+          // Normalizar "mañana" vs "manana"
+          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          
+          if (['mañana', 'tarde', 'noche'].includes(sorteoKey)) {
+            if (!this.sorteoData[sorteoKey]) {
+              this.sorteoData[sorteoKey] = { 
+                total_vendido: 0, 
+                numero_ganador: null, 
+                total_a_pagar: 0, 
+                numerosVendidos: {} 
+              };
+            }
+            
+            // Actualizar número ganador
+            this.sorteoData[sorteoKey].numero_ganador = sorteo.numero_ganador ? 
+              parseInt(sorteo.numero_ganador) : null;
+            
+            // Calcular total a pagar si hay número ganador
+            if (sorteo.numero_ganador) {
+              const numeroGanador = sorteo.numero_ganador.toString();
+              const montoVendidoNumero = this.sorteoData[sorteoKey].numerosVendidos[numeroGanador] || 0;
+              const factor = sorteo.factor_multiplicador || 70;
+              this.sorteoData[sorteoKey].total_a_pagar = montoVendidoNumero * factor;
+              
+              console.log(`Sorteo ${sorteoKey} cerrado - Ganador: ${numeroGanador}, Total a pagar: L ${this.sorteoData[sorteoKey].total_a_pagar}`);
+            }
+          }
+        });
+        
+        this.cdr.detectChanges(); // Forzar actualización de la UI
+      }
+    } catch (error) {
+      console.error('Error en loadSorteosCerrados:', error);
+    }
   }
 
   getSorteoTotalVendido(sorteo: string): number {

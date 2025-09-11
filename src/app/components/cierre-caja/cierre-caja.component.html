@@ -33,9 +33,25 @@
   </div>
 
   <!-- Estado del cierre -->
-  <div class="alert" [ngClass]="yaCerrado ? 'alert-info' : 'alert-warning'">
-    <i class="fas" [ngClass]="yaCerrado ? 'fa-check-circle' : 'fa-clock'"></i>
-    {{ yaCerrado ? 'El cierre diario ya fue realizado' : 'Cierre diario pendiente' }}
+  <div class="alert" [ngClass]="{
+    'alert-info': yaCerrado,
+    'alert-warning': !yaCerrado && hayActividadParaCierre(),
+    'alert-secondary': !yaCerrado && !hayActividadParaCierre()
+  }">
+    <i class="fas" [ngClass]="{
+      'fa-check-circle': yaCerrado,
+      'fa-clock': !yaCerrado && hayActividadParaCierre(),
+      'fa-info-circle': !yaCerrado && !hayActividadParaCierre()
+    }"></i>
+    <span *ngIf="yaCerrado">
+      ✅ No hay actividad desde el último cierre - Puede reimprimir el último cierre realizado
+    </span>
+    <span *ngIf="!yaCerrado && hayActividadParaCierre()">
+      ⏰ Hay actividad pendiente de cierre - Puede realizar un nuevo cierre de caja
+    </span>
+    <span *ngIf="!yaCerrado && !hayActividadParaCierre()">
+      ℹ️ No hay actividad registrada desde el último cierre
+    </span>
   </div>
 
   <!-- Loading state -->
@@ -50,7 +66,11 @@
     <!-- Resumen Financiero -->
     <div class="resumen-card" *ngIf="resumenCaja">
       <div class="card-header">
-        <h3>📊 Resumen Financiero del Día</h3>
+        <h3>📊 Resumen Financiero</h3>
+        <div class="periodo-info">
+          <i class="fas fa-clock"></i>
+          <span>{{ getPeriodoInfo() }}</span>
+        </div>
       </div>
       <div class="card-body">
         <div class="resumen-grid">
@@ -80,8 +100,6 @@
           </div>
         </div>
       </div>
-
-
     </div>
 
     <!-- Acciones Principales -->

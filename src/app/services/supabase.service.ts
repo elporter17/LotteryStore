@@ -2668,15 +2668,53 @@ export class SupabaseService {
 
   async obtenerMovimientosCaja(sucursal: string): Promise<import('../models/interfaces').MovimientoCaja[]> {
     try {
+      // Intentar usar la nueva función SQL que obtiene movimientos desde último cierre
       const { data, error } = await this.supabase
-        .from('vista_movimientos_caja_filtrada')
+        .rpc('fn_movimientos_caja_desde_ultimo_cierre', {
+          p_sucursal: sucursal
+        });
+
+      if (error) {
+        console.warn('Función SQL no disponible, usando consulta directa:', error.message);
+        // Fallback: usar vista o consulta directa
+        return await this.obtenerMovimientosCajaDirecto(sucursal);
+      }
+
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        tipo: row.tipo,
+        motivo: row.descripcion, // La función SQL devuelve 'descripcion'
+        monto: parseFloat(row.monto),
+        usuarioId: row.usuario_id, // Ahora incluido en la función SQL
+        sorteoId: row.sorteo_id,   // Ahora incluido en la función SQL
+        fecha: new Date(row.created_at), // La función SQL devuelve created_at
+        sucursal: row.sucursal, // Viene de la función SQL
+        nombreReceptor: row.nombre_receptor, // Ahora incluido en la función SQL
+        createdAt: new Date(row.created_at) // Usar created_at
+      }));
+    } catch (error) {
+      console.error('Error al obtener movimientos de caja:', error);
+      return await this.obtenerMovimientosCajaDirecto(sucursal);
+    }
+  }
+
+  // Método de respaldo para obtener movimientos de caja
+  private async obtenerMovimientosCajaDirecto(sucursal: string): Promise<import('../models/interfaces').MovimientoCaja[]> {
+    try {
+      // Obtener último cierre para esta sucursal
+      const ultimoCierre = await this.obtenerUltimoCierreDiario(sucursal);
+      const fechaDesde = ultimoCierre ? ultimoCierre.createdAt : this.getStartOfDayHonduras(new Date());
+
+      const { data, error } = await this.supabase
+        .from('movimientos_caja')
         .select('*')
         .eq('sucursal', sucursal)
-        .order('created_at', { ascending: false });
+        .gt('created_at', fechaDesde.toISOString()) // Usar created_at para consistencia
+        .order('created_at', { ascending: false }); // Ordenar por created_at
 
       if (error) throw error;
 
-      return (data || []).map(row => ({
+      return (data || []).map((row: any) => ({
         id: row.id,
         tipo: row.tipo,
         motivo: row.motivo,
@@ -2686,12 +2724,10 @@ export class SupabaseService {
         fecha: new Date(row.fecha),
         sucursal: row.sucursal,
         nombreReceptor: row.nombre_receptor,
-        createdAt: new Date(row.created_at),
-        // extra: por si quieres mostrar la fecha de inicio que la vista usó
-        fechaInicio: row.fecha_inicio ? new Date(row.fecha_inicio) : undefined
+        createdAt: new Date(row.created_at)
       }));
     } catch (error) {
-      console.error('Error al obtener movimientos de caja:', error);
+      console.error('Error en obtenerMovimientosCajaDirecto:', error);
       return [];
     }
   }
@@ -2925,7 +2961,9 @@ export class SupabaseService {
           total_neto: parseFloat(resultado.total_neto || '0'),
           movimientos_entrada: parseFloat(resultado.movimientos_entrada || '0'),
           movimientos_salida: parseFloat(resultado.movimientos_salida || '0'),
-          balance_final: parseFloat(resultado.balance_final || '0')
+          balance_final: parseFloat(resultado.balance_final || '0'),
+          fecha_ultimo_cierre: resultado.fecha_desde, // Incluir fecha del último cierre
+          fecha_hasta: resultado.fecha_hasta // Incluir fecha hasta
         };
       }
 
@@ -2935,7 +2973,9 @@ export class SupabaseService {
         total_neto: 0,
         movimientos_entrada: 0,
         movimientos_salida: 0,
-        balance_final: 0
+        balance_final: 0,
+        fecha_ultimo_cierre: null,
+        fecha_hasta: new Date().toISOString()
       };
     } catch (error) {
       console.error('Error al calcular resumen de caja diario:', error);
@@ -2945,20 +2985,23 @@ export class SupabaseService {
   }
   async calcularResumenCajaDiarioxSorteo(sucursal: string): Promise<any> {
     try {
-
-      // Usar la función SQL creada para calcular el resumen
+      // Usar la nueva función SQL que calcula por sorteo desde último cierre
       const { data, error } = await this.supabase
         .rpc('fn_resumen_cierre_actual_por_sorteo', {
           p_sucursal: sucursal
         });
-      console.log('Resultado de la función fn_resumen_cierre_actual_desde_ultimo_cierre:', data, error);
+      
+      console.log('Resultado de la función fn_resumen_cierre_actual_por_sorteo:', data, error);
 
-      if (error) throw error;
-      return data;
+      if (error) {
+        console.warn('Función SQL por sorteo no disponible:', error.message);
+        return [];
+      }
 
+      return data || [];
     } catch (error) {
-      console.error('Error al calcular resumen de caja diario:', error);
-      // Fallback: calcular manualmente
+      console.error('Error al calcular resumen de caja por sorteo:', error);
+      return [];
     }
   }
 
@@ -3228,10 +3271,13 @@ export class SupabaseService {
 
   async registrarCierreDiario(cierre: Partial<import('../models/interfaces').CierreDiario>): Promise<void> {
     try {
+      const fechaStr = this.formatDateOnlyForSupabase(cierre.fecha!);
+      
+      // Insertar un nuevo registro de cierre cada vez
       const { data, error } = await this.supabase
         .from('cierres_diarios')
         .insert({
-          fecha: this.formatDateOnlyForSupabase(cierre.fecha!),
+          fecha: fechaStr,
           usuario_id: cierre.usuarioId,
           sucursal: cierre.sucursal,
           total_vendido: cierre.totalVendido,
@@ -3242,10 +3288,13 @@ export class SupabaseService {
           notas: cierre.notas,
           sorteos_manana: cierre.sorteosMañana,
           sorteos_tarde: cierre.sorteosTarde,
-          sorteos_noche: cierre.sorteosNoche
+          sorteos_noche: cierre.sorteosNoche,
+          created_at: new Date().toISOString() // Asegurar que se registre la fecha/hora exacta
         });
 
       if (error) throw error;
+      
+      console.log(`Cierre registrado exitosamente para ${fechaStr} - ${cierre.sucursal}`);
     } catch (error) {
       console.error('Error al registrar cierre diario:', error);
       throw error;

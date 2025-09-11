@@ -167,11 +167,11 @@
             <div class="summary-label">Total Vendido</div>
             <div class="summary-value">L {{ getSorteoTotalVendido('mañana').toFixed(2) }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoNumeroGanador('mañana') !== null">
+          <div class="summary-card winner-card" *ngIf="getSorteoNumeroGanador('mañana') !== null">
             <div class="summary-label">Número Ganador</div>
             <div class="summary-value winner-number">{{ getSorteoNumeroGanador('mañana')!.toString().padStart(2, '0') }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoTotalPagar('mañana') > 0">
+          <div class="summary-card payout-card" *ngIf="getSorteoTotalPagar('mañana') > 0">
             <div class="summary-label">Total a Pagar</div>
             <div class="summary-value payout">L {{ getSorteoTotalPagar('mañana').toFixed(2) }}</div>
           </div>
@@ -198,11 +198,11 @@
             <div class="summary-label">Total Vendido</div>
             <div class="summary-value">L {{ getSorteoTotalVendido('tarde').toFixed(2) }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoNumeroGanador('tarde') !== null">
+          <div class="summary-card winner-card" *ngIf="getSorteoNumeroGanador('tarde') !== null">
             <div class="summary-label">Número Ganador</div>
             <div class="summary-value winner-number">{{ getSorteoNumeroGanador('tarde')!.toString().padStart(2, '0') }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoTotalPagar('tarde') > 0">
+          <div class="summary-card payout-card" *ngIf="getSorteoTotalPagar('tarde') > 0">
             <div class="summary-label">Total a Pagar</div>
             <div class="summary-value payout">L {{ getSorteoTotalPagar('tarde').toFixed(2) }}</div>
           </div>
@@ -229,11 +229,11 @@
             <div class="summary-label">Total Vendido</div>
             <div class="summary-value">L {{ getSorteoTotalVendido('noche').toFixed(2) }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoNumeroGanador('noche') !== null">
+          <div class="summary-card winner-card" *ngIf="getSorteoNumeroGanador('noche') !== null">
             <div class="summary-label">Número Ganador</div>
             <div class="summary-value winner-number">{{ getSorteoNumeroGanador('noche')!.toString().padStart(2, '0') }}</div>
           </div>
-          <div class="summary-card" *ngIf="getSorteoTotalPagar('noche') > 0">
+          <div class="summary-card payout-card" *ngIf="getSorteoTotalPagar('noche') > 0">
             <div class="summary-label">Total a Pagar</div>
             <div class="summary-value payout">L {{ getSorteoTotalPagar('noche').toFixed(2) }}</div>
           </div>
