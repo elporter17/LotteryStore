@@ -177,29 +177,37 @@
   border: 1px solid #dee2e6;
   margin-bottom: 20px;
   background: white;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  width: 100%;
+  max-width: 100%;
 }
 
 .table-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 60px;
+  grid-template-columns: 80px 1fr 60px;
   background: #f8f9fa;
   border-bottom: 1px solid #dee2e6;
   font-weight: 600;
   color: #495057;
+  min-height: 50px;
+  align-items: center;
 }
 
 .table-header .col-numero,
 .table-header .col-monto,
 .table-header .col-accion {
-  padding: 14px;
-  border-right: 1px solid #dee2e6;
+  padding: 12px 8px;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #dee2e6;
+  word-break: break-word;
 }
 
 .table-header .col-accion {
@@ -208,9 +216,11 @@
 
 .table-body .table-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 60px;
+  grid-template-columns: 80px 1fr 60px;
   border-bottom: 1px solid #f8f9fa;
   transition: background-color 0.2s ease;
+  min-height: 56px;
+  align-items: center;
 }
 
 .table-body .table-row:hover {
@@ -224,10 +234,28 @@
 .table-body .col-numero,
 .table-body .col-monto,
 .table-body .col-accion {
-  padding: 12px;
-  border-right: 1px solid #f8f9fa;
+  padding: 12px 8px;
   text-align: center;
   color: #495057;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #f8f9fa;
+  word-break: break-word;
+  font-size: 14px;
+}
+
+.table-body .col-numero {
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  color: #28a745;
+}
+
+.table-body .col-monto {
+  font-weight: 600;
+  color: #007bff;
+  font-size: 15px;
 }
 
 .table-body .col-accion {
@@ -237,14 +265,35 @@
 .btn-remove {
   background: #dc3545;
   border: none;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: white;
   cursor: pointer;
-  width: 30px;
-  height: 30px;
-  border-radius: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  
+  // Propiedades anti-zoom para móviles
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn-remove:hover:not(:disabled) {
+  background: #c82333;
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.btn-remove:active {
+  transform: scale(0.95);
 }
 
 .btn-remove:hover {
@@ -257,36 +306,64 @@
   margin: 20px 0;
   display: flex;
   justify-content: center;
+  padding: 0 10px;
 }
 
 .total-card {
   background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
   border: 2px solid #28a745;
   border-radius: 12px;
-  padding: 20px 30px;
+  padding: 16px 24px;
   box-shadow: 0 4px 12px rgba(40, 167, 69, 0.25);
   display: flex;
   align-items: center;
-  gap: 15px;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 280px;
+  max-width: 100%;
+  width: 100%;
+  
+  @media (max-width: 480px) {
+    min-width: auto;
+    width: 100%;
+    padding: 14px 16px;
+    gap: 8px;
+  }
   
   .total-label {
     font-size: 16px;
     font-weight: 600;
     color: #ffffff;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
+    
+    @media (max-width: 480px) {
+      font-size: 14px;
+    }
   }
   
   .total-amount {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
     color: #ffffff;
     background: rgba(255, 255, 255, 0.2);
-    padding: 8px 16px;
+    padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     letter-spacing: 0.5px;
+    text-align: center;
+    flex: 1;
+    
+    @media (max-width: 480px) {
+      font-size: 20px;
+      padding: 6px 10px;
+    }
+    
+    @media (max-width: 359px) {
+      font-size: 18px;
+      padding: 6px 8px;
+    }
   }
 }
 
@@ -299,14 +376,32 @@
 .btn-add-more {
   background: #17a2b8;
   border: none;
-  padding: 10px 20px;
+  padding: 12px 24px;
   font-weight: 500;
   cursor: pointer;
   margin: 20px 0;
   color: white;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: all 0.2s ease;
   font-size: 14px;
+  width: 100%;
+  max-width: 300px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  
+  // Propiedades anti-zoom para móviles
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  
+  @media (max-width: 480px) {
+    padding: 10px 20px;
+    margin: 15px 0;
+    font-size: 13px;
+  }
 }
 
 .btn-add-more:hover:not(:disabled) {
@@ -317,19 +412,43 @@
 .btn-pagar {
   background: #fd7e14;
   border: none;
-  padding: 14px 32px;
-  font-size: 16px;
-  font-weight: 600;
+  padding: 16px 32px;
+  font-size: 18px;
+  font-weight: 700;
   cursor: pointer;
-  float: right;
   color: white;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: all 0.2s ease;
+  width: 100%;
+  max-width: 400px;
+  display: block;
+  margin: 20px auto;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  
+  // Propiedades anti-zoom para móviles
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  
+  @media (max-width: 480px) {
+    padding: 14px 24px;
+    font-size: 16px;
+    margin: 15px auto;
+  }
+  
+  @media (max-width: 359px) {
+    padding: 12px 20px;
+    font-size: 15px;
+  }
 }
 
 .btn-pagar:hover:not(:disabled) {
   background: #e76500;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(253, 126, 20, 0.3);
 }
 
 .ventas-actuales {
@@ -1270,14 +1389,41 @@
   
   .table-header,
   .table-body .table-row {
-    grid-template-columns: 1fr 1fr 50px;
+    grid-template-columns: 70px 1fr 50px;
+    min-height: 48px;
   }
   
-  .col-numero,
-  .col-monto,
-  .col-accion {
-    padding: 8px !important;
-    font-size: 13px;
+  .table-header .col-numero,
+  .table-header .col-monto,
+  .table-header .col-accion,
+  .table-body .col-numero,
+  .table-body .col-monto,
+  .table-body .col-accion {
+    padding: 10px 6px !important;
+    font-size: 12px;
+  }
+  
+  .table-body .col-numero {
+    font-size: 16px !important;
+  }
+  
+  .table-body .col-monto {
+    font-size: 13px !important;
+  }
+  
+  .btn-remove {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 14px !important;
+  }
+  
+  // Mejorar el contenedor de jugadas
+  .jugadas-screen {
+    padding: 10px;
+  }
+  
+  .jugadas-table {
+    margin-bottom: 15px;
   }
   
   .modal-content {
@@ -1348,5 +1494,78 @@
   
   .numero-vendido-item .numero {
     font-size: 16px;
+  }
+}
+
+// Media queries para pantallas extra pequeñas (menos de 360px)
+@media (max-width: 359px) {
+  .table-header,
+  .table-body .table-row {
+    grid-template-columns: 60px 1fr 45px;
+    min-height: 44px;
+  }
+  
+  .table-header .col-numero,
+  .table-header .col-monto,
+  .table-header .col-accion,
+  .table-body .col-numero,
+  .table-body .col-monto,
+  .table-body .col-accion {
+    padding: 8px 4px !important;
+    font-size: 11px;
+  }
+  
+  .table-body .col-numero {
+    font-size: 14px !important;
+  }
+  
+  .table-body .col-monto {
+    font-size: 12px !important;
+  }
+  
+  .btn-remove {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+  
+  .lottery-interface {
+    padding: 0;
+  }
+  
+  .main-content {
+    padding: 8px;
+  }
+  
+  .jugadas-screen {
+    padding: 5px !important;
+  }
+  
+  .jugadas-table {
+    margin-bottom: 10px !important;
+  }
+}
+
+// Mejoras para el scroll en pantallas pequeñas
+@media (max-width: 480px) {
+  .jugadas-screen {
+    padding: 10px;
+  }
+  
+  .table-body {
+    max-height: 300px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .total-container {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 10px 0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+    margin: 0 -10px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 }
