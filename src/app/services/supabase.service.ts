@@ -1920,7 +1920,7 @@ export class SupabaseService {
           if (!sucursalesMap.has(sucursal)) {
             sucursalesMap.set(sucursal, {
               sucursal,
-              factor: 75,
+              factor: 80,
               usuario: user.id,
               email: user.email || ''
             });
@@ -1940,11 +1940,11 @@ export class SupabaseService {
       console.error('Error al obtener usuarios por sucursal:', error);
       // Fallback final con datos por defecto
       return [
-        { sucursal: 'Sucursal 1', factor: 75, usuario: '', email: 'venta1@loteria.com' },
-        { sucursal: 'Sucursal 2', factor: 75, usuario: '', email: 'venta2@loteria.com' },
-        { sucursal: 'Sucursal 3', factor: 75, usuario: '', email: 'venta3@loteria.com' },
-        { sucursal: 'Sucursal 4', factor: 75, usuario: '', email: 'venta4@loteria.com' },
-        { sucursal: 'Principal', factor: 75, usuario: '', email: 'principal@loteria.com' }
+        { sucursal: 'Sucursal 1', factor: 80, usuario: '', email: 'venta1@loteria.com' },
+        { sucursal: 'Sucursal 2', factor: 80, usuario: '', email: 'venta2@loteria.com' },
+        { sucursal: 'Sucursal 3', factor: 80, usuario: '', email: 'venta3@loteria.com' },
+        { sucursal: 'Sucursal 4', factor: 80, usuario: '', email: 'venta4@loteria.com' },
+        { sucursal: 'Principal', factor: 80, usuario: '', email: 'principal@loteria.com' }
       ];
     }
   }
@@ -3092,99 +3092,255 @@ export class SupabaseService {
 
   async obtenerSorteosPendientesPago(sucursal: string): Promise<any[]> {
     try {
-      // 1. Obtener sorteos pendientes de pago desde la vista
-      const { data: sorteosData, error } = await this.supabase
-        .from('vista_sorteos_pendientes_pago_filtrada')
+      console.log(`🔍 Buscando sorteos pendientes de pago para sucursal: ${sucursal}`);
+      
+      // 1. Obtener la fecha del último cierre para usarla como referencia
+      const ultimoCierre = await this.obtenerUltimoCierreDiario(sucursal);
+      const fechaDesde = ultimoCierre ? ultimoCierre.createdAt : this.getStartOfDayHonduras(new Date());
+      
+      console.log(`📅 Fecha desde último cierre: ${this.formatLocalDateForSupabase(fechaDesde)}`);
+      
+      // 2. Obtener sorteos cerrados que tienen total_pagado > 0 (esto significa que hay ganadores)
+      const { data: sorteosCerrados, error: sorteoError } = await this.supabase
+        .from('sorteos')
         .select('*')
         .eq('sucursal', sucursal)
-        .order('sorteo');
+        .eq('cerrado', true)
+        .gt('total_pagado', 0)
+        .order('fecha', { ascending: false });
 
-      if (error) throw error;
-      const sorteosPendientes = sorteosData || [];
+      if (sorteoError) {
+        console.error('Error obteniendo sorteos cerrados:', sorteoError);
+        throw sorteoError;
+      }
 
-      // 2. Obtener movimientos de caja (pagos) desde la vista filtrada
-      const { data: movimientosData, error: movimientosError } = await this.supabase
-        .from('vista_movimientos_caja_filtrada')
-        .select('sorteo_id, tipo, motivo')
+      console.log(`📊 Sorteos cerrados encontrados:`, sorteosCerrados);
+
+      if (!sorteosCerrados || sorteosCerrados.length === 0) {
+        console.log('❌ No hay sorteos cerrados con premios para esta sucursal');
+        return [];
+      }
+
+      // 3. Obtener movimientos de caja (pagos ya realizados) desde la fecha del último cierre
+      const { data: movimientosPago, error: movimientosError } = await this.supabase
+        .from('movimientos_caja')
+        .select('sorteo_id, tipo, motivo, monto, fecha, created_at')
         .eq('sucursal', sucursal)
-        .eq('tipo', 'salida');
+        .eq('tipo', 'salida')
+        .like('motivo', '%Pago premio sorteo%')
+        .gte('created_at', this.formatLocalDateForSupabase(fechaDesde));
 
       if (movimientosError) {
-        console.warn('Error obteniendo movimientos de caja:', movimientosError);
+        console.warn('Error obteniendo movimientos de pago:', movimientosError);
       }
 
+      console.log(`💰 Movimientos de pago encontrados:`, movimientosPago);
+
+      // 4. Crear set de sorteos ya pagados (con validación de número ganador)
       const sorteosPagados = new Set();
-      (movimientosData || []).forEach(movimiento => {
-        if (
-          movimiento.motivo &&
-          movimiento.motivo.includes('Pago premio sorteo') &&
-          movimiento.sorteo_id
-        ) {
-          sorteosPagados.add(movimiento.sorteo_id);
-        }
-      });
-
-      // 3. Obtener ventas relacionadas a los sorteos encontrados
-      const { data: ventasData, error: ventasError } = await this.supabase
-        .from('sales')
-        .select(`
-        sorteo,
-        sale_details!inner(numero, monto)
-      `)
-        .eq('sucursal', sucursal)
-        .in('sorteo', sorteosPendientes.map(s => s.sorteo));
-
-      if (ventasError) {
-        console.warn('Error obteniendo ventas:', ventasError);
-      }
-
-      // 4. Agrupar ventas por sorteo y número
-      const ventasPorSorteo = new Map();
-      (ventasData || []).forEach(venta => {
-        if (!ventasPorSorteo.has(venta.sorteo)) {
-          ventasPorSorteo.set(venta.sorteo, new Map());
-        }
-        const sorteoMap = ventasPorSorteo.get(venta.sorteo);
-        venta.sale_details.forEach(detalle => {
-          const numero = parseInt(detalle.numero);
-          const monto = parseFloat(detalle.monto || 0);
-          sorteoMap.set(numero, (sorteoMap.get(numero) || 0) + monto);
+      (movimientosPago || []).forEach(movimiento => {
+        console.log(`🔍 Analizando movimiento:`, {
+          sorteo_id: movimiento.sorteo_id,
+          motivo: movimiento.motivo,
+          monto: movimiento.monto,
+          fecha: movimiento.fecha
         });
+        
+        if (movimiento.sorteo_id && movimiento.motivo) {
+          // Extraer el número ganador del motivo del movimiento
+          const motivoMatch = movimiento.motivo.match(/Número ganador:\s*(\d+)/i);
+          const numeroGanadorMovimiento = motivoMatch ? motivoMatch[1] : null;
+          
+          console.log(`🎯 Número ganador en motivo: ${numeroGanadorMovimiento}`);
+          
+          // Buscar el sorteo correspondiente para validar el número ganador actual
+          const sorteoCorrespondiente = sorteosCerrados.find(s => s.id === movimiento.sorteo_id);
+          
+          if (sorteoCorrespondiente) {
+            const numeroGanadorActual = sorteoCorrespondiente.numero_ganador;
+            console.log(`🎲 Número ganador actual del sorteo: ${numeroGanadorActual}`);
+            
+            // Solo marcar como pagado si los números ganadores coinciden
+            if (numeroGanadorMovimiento === numeroGanadorActual) {
+              sorteosPagados.add(movimiento.sorteo_id);
+              console.log(`✅ Sorteo ya pagado (números coinciden): ${movimiento.sorteo_id}`);
+            } else {
+              console.log(`⚠️ Pago obsoleto - número ganador cambió de ${numeroGanadorMovimiento} a ${numeroGanadorActual} para sorteo ${movimiento.sorteo_id}`);
+            }
+          } else {
+            console.log(`❌ No se encontró sorteo correspondiente para ${movimiento.sorteo_id}`);
+          }
+        }
       });
 
-      // 5. Armar respuesta final - EXCLUIR sorteos ya pagados
-      return sorteosPendientes
-        .filter(sorteo => !sorteosPagados.has(sorteo.id)) // Filtrar sorteos ya pagados
-        .map(sorteo => {
+      // 5. Preparar lista de sorteos pendientes y ya pagados
+      const todosLosSorteos: any[] = [];
+      
+      // Agregar sorteos ya pagados (siempre se muestran)
+      sorteosCerrados
+        .filter(sorteo => sorteosPagados.has(sorteo.id))
+        .forEach(async (sorteo) => {
+          console.log(`✅ Agregando sorteo ya pagado: ${sorteo.id}`);
+          
+          // Para sorteos ya pagados, calcular la cantidad comprada del número ganador para mostrar correctamente
           const numeroGanador = parseInt(sorteo.numero_ganador);
-          const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 75);
-          const totalOriginal = parseFloat(sorteo.total_pagado || '0');
+          let cantidadCompradaOriginal = 0;
+          
+          try {
+            // Calcular la cantidad comprada del número ganador basándose en el total_pagado y factor
+            const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 80);
+            const totalPagado = parseFloat(sorteo.total_pagado || '0');
+            
+            // Calcular al revés: cantidad = total_pagado / factor
+            if (factorMultiplicador > 0 && totalPagado > 0) {
+              cantidadCompradaOriginal = totalPagado / factorMultiplicador;
+            }
+            
+            console.log(`💰 Sorteo pagado ${sorteo.id}: total_pagado=${totalPagado}, factor=${factorMultiplicador}, cantidad_calculada=${cantidadCompradaOriginal}`);
+          } catch (error) {
+            console.warn(`⚠️ Error calculando cantidad original para sorteo pagado ${sorteo.id}:`, error);
+          }
+          
+          todosLosSorteos.push({
+            ...sorteo,
+            ya_pagado: true,
+            cantidad_comprada_numero_ganador: cantidadCompradaOriginal, // Mantener el valor original calculado
+            total_calculado_pagar: parseFloat(sorteo.total_pagado || '0')
+          });
+        });
 
-          let cantidadCompradaNumeroGanador = 0;
-          if (ventasPorSorteo.has(sorteo.sorteo)) {
-            cantidadCompradaNumeroGanador = ventasPorSorteo.get(sorteo.sorteo).get(numeroGanador) || 0;
+      // 6. Procesar sorteos no pagados desde la fecha del último cierre
+      const sorteosPendientes = sorteosCerrados
+        .filter(sorteo => !sorteosPagados.has(sorteo.id))
+        .map(async (sorteo) => {
+          const numeroGanador = parseInt(sorteo.numero_ganador);
+          const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 80);
+          const totalPagado = parseFloat(sorteo.total_pagado || '0');
+          const totalVendido = parseFloat(sorteo.total_vendido || '0');
+
+          console.log(`🎯 Sorteo pendiente: ${sorteo.id} - Ganador: ${numeroGanador} - Total a pagar: L${totalPagado}`);
+
+          // Obtener la cantidad vendida específicamente del número ganador desde el último cierre
+          let cantidadVendidaNumeroGanador = 0;
+          try {
+            console.log(`🔍 Buscando ventas para número ${numeroGanador} desde último cierre:`, {
+              sucursal: sucursal,
+              sorteo: sorteo.sorteo,
+              fecha_desde: this.formatLocalDateForSupabase(fechaDesde)
+            });
+
+            // Consulta usando la fecha del último cierre como punto de partida
+            const { data: ventasIds, error: ventasError } = await this.supabase
+              .from('sales')
+              .select('id, fecha, created_at')
+              .eq('sucursal', sucursal)
+              .eq('sorteo', sorteo.sorteo)
+              .gte('created_at', this.formatLocalDateForSupabase(fechaDesde));
+
+            console.log(`📊 Resultado consulta ventas desde último cierre:`, {
+              error: ventasError,
+              cantidad_encontradas: ventasIds?.length || 0,
+              ventas: ventasIds
+            });
+
+            if (ventasError) {
+              console.warn(`❌ Error obteniendo IDs de ventas:`, ventasError);
+            } else {
+              console.log(`📋 IDs de ventas encontrados:`, ventasIds);
+              
+              if (ventasIds && ventasIds.length > 0) {
+                const idsArray = ventasIds.map(v => v.id);
+                console.log(`🔍 Buscando detalles para sale_ids:`, idsArray);
+                
+                // Obtener los detalles de esas ventas
+                const { data: detallesVentas, error: detallesError } = await this.supabase
+                  .from('sale_details')
+                  .select('numero, monto, sale_id')
+                  .in('sale_id', idsArray);
+
+                console.log(`📊 Resultado consulta detalles:`, {
+                  error: detallesError,
+                  cantidad_encontrada: detallesVentas?.length || 0,
+                  detalles: detallesVentas
+                });
+
+                if (detallesError) {
+                  console.warn(`❌ Error obteniendo detalles de ventas:`, detallesError);
+                } else {
+                  console.log(`📊 Detalles de ventas encontrados:`, detallesVentas);
+                  
+                  // Filtrar y sumar solo el número ganador
+                  (detallesVentas || []).forEach((detalle: any) => {
+                    const numeroDetalle = parseInt(detalle.numero.toString());
+                    const montoDetalle = parseFloat(detalle.monto || 0);
+                    
+                    console.log(`🎲 Procesando detalle: número ${numeroDetalle}, monto L${montoDetalle}, sale_id: ${detalle.sale_id}, ¿es ganador? ${numeroDetalle === numeroGanador}`);
+                    
+                    if (numeroDetalle === numeroGanador) {
+                      cantidadVendidaNumeroGanador += montoDetalle;
+                      console.log(`✅ ¡MATCH! Sumando L${montoDetalle} al número ganador. Total acumulado: L${cantidadVendidaNumeroGanador}`);
+                    }
+                  });
+                }
+              } else {
+                console.log(`⚠️ No se encontraron ventas desde la fecha del último cierre`);
+              }
+            }
+            
+            console.log(`💰 Cantidad final vendida del número ${numeroGanador}: L${cantidadVendidaNumeroGanador}`);
+          } catch (error) {
+            console.warn(`❌ Error calculando ventas del número ${numeroGanador}:`, error);
           }
 
-          const totalCalculadoPagar = cantidadCompradaNumeroGanador * factorMultiplicador;
+          // Log final antes de crear el objeto
+          console.log(`🔧 Creando objeto sorteo con datos finales:`, {
+            sorteo_id: sorteo.id,
+            numero_ganador: sorteo.numero_ganador,
+            cantidadVendidaNumeroGanador: cantidadVendidaNumeroGanador,
+            factorMultiplicador: factorMultiplicador,
+            total_calculado: cantidadVendidaNumeroGanador * factorMultiplicador
+          });
 
-          return {
-            ...sorteo,
-            cantidad_comprada_numero_ganador: cantidadCompradaNumeroGanador,
-            total_calculado_pagar: totalCalculadoPagar,
+          const objetoSorteo = {
+            id: sorteo.id,
+            fecha: sorteo.fecha,
+            sorteo: sorteo.sorteo,
+            numero_ganador: sorteo.numero_ganador,
             factor_multiplicador: factorMultiplicador,
-            ya_pagado: false, // Ya no necesitamos esta marca porque los pagados están excluidos
+            total_vendido: sorteo.total_vendido,
+            total_pagado: sorteo.total_pagado,
+            ganancia_neta: sorteo.ganancia_neta,
+            sucursal: sorteo.sucursal,
+            cerrado: sorteo.cerrado,
+            // Datos adicionales para el componente
+            cantidad_comprada_numero_ganador: cantidadVendidaNumeroGanador,
+            total_calculado_pagar: cantidadVendidaNumeroGanador * factorMultiplicador,
+            ya_pagado: false,
             calculo_detalle: {
-              cantidad_comprada: cantidadCompradaNumeroGanador,
+              cantidad_comprada: cantidadVendidaNumeroGanador,
               factor: factorMultiplicador,
-              total_calculado: totalCalculadoPagar,
-              total_original: totalOriginal,
-              diferencia: Math.abs(totalCalculadoPagar - totalOriginal),
-              coincide: Math.abs(totalCalculadoPagar - totalOriginal) < 0.01
+              total_calculado: cantidadVendidaNumeroGanador * factorMultiplicador,
+              total_original: totalPagado,
+              diferencia: Math.abs((cantidadVendidaNumeroGanador * factorMultiplicador) - totalPagado),
+              coincide: Math.abs((cantidadVendidaNumeroGanador * factorMultiplicador) - totalPagado) < 0.01
             }
           };
+
+          console.log(`✅ Objeto sorteo pendiente creado:`, objetoSorteo);
+          todosLosSorteos.push(objetoSorteo);
+          return objetoSorteo;
         });
+
+      // Resolver todas las promesas de sorteos pendientes
+      await Promise.all(sorteosPendientes);
+
+      console.log(`✅ Total de sorteos (pendientes + pagados):`, todosLosSorteos.length);
+      console.log('📋 Detalle de todos los sorteos:', todosLosSorteos);
+
+      return todosLosSorteos;
+
     } catch (error) {
-      console.error('Error al obtener sorteos pendientes de pago:', error);
+      console.error('❌ Error al obtener sorteos pendientes de pago:', error);
       return [];
     }
   }

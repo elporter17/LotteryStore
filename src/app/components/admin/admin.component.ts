@@ -151,7 +151,7 @@ export class AdminComponent implements OnInit {
     }
   }
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     this.supabaseService.currentUser$.subscribe(user => {
       this.currentUser = user;
       if (!user || user.role !== 'admin') {
@@ -159,15 +159,27 @@ export class AdminComponent implements OnInit {
       }
     });
 
-    console.log('Sorteos realizados:', this.sorteosRealizados);
+    console.log('🚀 Iniciando carga de datos del admin...');
 
-    this.sorteosHechos();
-    this.cargarDatosDelDia();
-    // Cargar datos iniciales
-    this.loadSales();
-    this.loadSorteosData(); // Cargar datos de sorteos existentes
-    this.initializeUsers();
-    this.loadSorteoSchedules(); // Ahora es async
+    try {
+      // Cargar sorteo schedules primero (necesario para otros métodos)
+      await this.loadSorteoSchedules();
+      
+      // Luego cargar datos en paralelo
+      await Promise.all([
+        this.sorteosHechos(),
+        this.cargarDatosDelDia(),
+        this.loadSales(),
+        this.initializeUsers()
+      ]);
+      
+      // Finalmente cargar datos de sorteos (después de que schedules estén listos)
+      await this.loadSorteosData();
+      
+      console.log('✅ Carga inicial de admin completada');
+    } catch (error) {
+      console.error('❌ Error en ngOnInit del admin:', error);
+    }
   }
 
   private async sorteosHechos(): Promise<void> {
@@ -531,28 +543,66 @@ export class AdminComponent implements OnInit {
       for (const sorteo of this.sorteos) {
         try {
           const sorteoId = `${this.supabaseService.formatDateOnlyForSupabase(hondurasToday)}-${sorteo.name}`;
-          const sorteoData = await this.supabaseService.getSorteoById(sorteoId);
-
-          if (sorteoData) {
-            this.sorteosData[sorteoId] = sorteoData; // Usar sorteoId como clave
+          console.log(`🔍 Cargando datos para sorteo: ${sorteoId}`);
+          
+          // Usar el método que obtiene resumen por sucursal para verificar si está cerrado
+          const sorteoResumen = await this.supabaseService.getSorteoResumenPorSucursal(sorteoId);
+          console.log(`📊 Resumen obtenido para ${sorteoId}:`, sorteoResumen);
+          
+          if (sorteoResumen && sorteoResumen.length > 0) {
+            // Si hay resumen, significa que está cerrado
+            const primerResumen = sorteoResumen[0];
+            
+            this.sorteosData[sorteoId] = {
+              id: sorteoId,
+              fecha: hondurasToday,
+              sorteo: sorteo.name,
+              horaCierre: hondurasToday,
+              numeroGanador: primerResumen.numero_ganador || '',
+              factorMultiplicador: primerResumen.factor_multiplicador || 70,
+              totalVendido: parseFloat(primerResumen.total_vendido || '0'),
+              totalPagado: parseFloat(primerResumen.total_pagado || '0'),
+              gananciaNeta: parseFloat(primerResumen.ganancia_neta || '0'),
+              cerrado: true, // Si hay resumen, está cerrado
+              sucursal: primerResumen.sucursal || 'General'
+            } as Sorteo;
 
             // Sincronizar con variables locales
-            this.winningNumbers[sorteo.name] = sorteoData.numeroGanador || '';
-            this.factorMultiplicador[sorteo.name] = sorteoData.factorMultiplicador || 70;
+            this.winningNumbers[sorteo.name] = primerResumen.numero_ganador || '';
+            this.factorMultiplicador[sorteo.name] = primerResumen.factor_multiplicador || 70;
+            
+            console.log(`✅ Sorteo ${sorteoId} marcado como CERRADO con ganador: ${primerResumen.numero_ganador}`);
+          } else {
+            // Si no hay resumen, intentar método directo
+            const sorteoData = await this.supabaseService.getSorteoById(sorteoId);
+            
+            if (sorteoData) {
+              this.sorteosData[sorteoId] = sorteoData;
+              this.winningNumbers[sorteo.name] = sorteoData.numeroGanador || '';
+              this.factorMultiplicador[sorteo.name] = sorteoData.factorMultiplicador || 70;
+              
+              console.log(`✅ Sorteo ${sorteoId} cargado directamente - Cerrado: ${sorteoData.cerrado}`);
+            } else {
+              console.log(`❌ No se encontraron datos para sorteo: ${sorteoId}`);
+            }
           }
         } catch (error: any) {
+          console.error(`❌ Error cargando sorteo ${sorteo.name}:`, error);
 
           // Si es error 406 o RLS, intentar método alternativo
           if (error?.status === 406 || error?.code === '42501') {
             // Aquí podrías implementar un método alternativo si tienes uno
+            console.log(`⚠️ Error RLS para ${sorteo.name}, saltando...`);
           }
         }
       }
 
+      console.log('📋 Estado final de sorteosData:', this.sorteosData);
 
       // Forzar actualización de la UI
       this.cdr.detectChanges();
     } catch (error) {
+      console.error('❌ Error general en loadSorteosData:', error);
     }
   }
 

@@ -266,29 +266,30 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
     async abrirModalPagoSorteo(sorteo: any): Promise<void> {
         try {
-            // Obtener venta específica del número ganador
-            let ventaPorNumero = 0;
-            if (sorteo.numero_ganador && this.selectedSucursalForCierre) {
-                const resumenSorteo = await this.supabaseService.obtenerResumenSorteo(
-                    this.fechaHoy,
-                    this.selectedSucursalForCierre,
-                    sorteo.sorteo
-                );
-                console.log('Resumen del sorteo:', resumenSorteo);
-                ventaPorNumero = resumenSorteo?.ventaPorNumero || 0;
-            }
+            console.log('📋 Abriendo modal con datos del sorteo:', sorteo);
+            
+            // Usar la información que ya está disponible en el objeto sorteo
+            const ventaPorNumero = sorteo.cantidad_comprada_numero_ganador || 0;
+            
+            console.log('💰 Datos para el modal:', {
+                numero_ganador: sorteo.numero_ganador,
+                cantidad_comprada_numero_ganador: sorteo.cantidad_comprada_numero_ganador,
+                ventaPorNumero: ventaPorNumero,
+                total_calculado_pagar: sorteo.total_calculado_pagar
+            });
 
             this.sorteoParaPago = {
                 sorteoId: sorteo.id,
                 numeroGanador: sorteo.numero_ganador,
                 factor: sorteo.factor_multiplicador,
-                ventaPorNumero,
+                ventaPorNumero: ventaPorNumero,
                 totalVendido: sorteo.total_vendido,
-                totalPagar: sorteo.total_pagado,
+                totalPagar: sorteo.total_calculado_pagar || sorteo.total_pagado,
                 totalNeto: sorteo.ganancia_neta,
                 sucursal: this.selectedSucursalForCierre
             };
-            console.log('Sorteo para pago:', this.sorteoParaPago);
+            
+            console.log('✅ Sorteo para pago creado:', this.sorteoParaPago);
             this.showPagoSorteoModal = true;
             this.cdr.markForCheck(); // Usar markForCheck
 
@@ -931,27 +932,39 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
 
     // Método para identificar sorteos ya pagados basándose en los movimientos del día
     private identificarSorteosPagados(): void {
+        console.log('🔍 Identificando sorteos pagados...');
+        console.log('📋 Movimientos del día:', this.movimientosDelDia);
+        
         this.sorteosPagados = [];
 
         // Buscar movimientos de tipo 'salida' que contengan 'Pago premio sorteo' en el motivo
         this.movimientosDelDia.forEach(movimiento => {
+            console.log('🔍 Analizando movimiento:', movimiento);
+            
             if (movimiento.tipo === 'salida' &&
                 movimiento.motivo &&
                 movimiento.motivo.includes('Pago premio sorteo') &&
                 movimiento.sorteoId) {
 
+                console.log('✅ Movimiento de pago encontrado:', movimiento);
+                
                 if (!this.sorteosPagados.includes(movimiento.sorteoId)) {
                     this.sorteosPagados.push(movimiento.sorteoId);
+                    console.log('📝 Sorteo agregado a lista de pagados:', movimiento.sorteoId);
                 }
             }
         });
 
-        console.log('Sorteos identificados como pagados:', this.sorteosPagados);
+        console.log('✅ Sorteos identificados como pagados:', this.sorteosPagados);
+        console.log('📊 Sorteos pendientes de pago:', this.sorteosPendientesPago);
     }
 
     // Método para verificar si un sorteo ya fue pagado
     isSorteoPagado(sorteoId: string): boolean {
-        return this.sorteosPagados.includes(sorteoId);
+        const estaPagado = this.sorteosPagados.includes(sorteoId);
+        console.log(`🔍 Verificando si sorteo ${sorteoId} está pagado:`, estaPagado);
+        console.log(`📋 Lista actual de sorteos pagados:`, this.sorteosPagados);
+        return estaPagado;
     }
 
     // Método para marcar un sorteo como pagado
