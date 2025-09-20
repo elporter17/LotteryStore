@@ -220,22 +220,30 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
   async updateSorteoInfo(): Promise<void> {
     try {
+      console.log('🔄 Actualizando información del sorteo...');
 
       // Asegurar que tenemos los horarios más recientes
       await this.sorteoService.refreshSorteoSchedules();
 
+      const previousSorteo = this.currentSorteo?.name;
       this.currentSorteo = this.sorteoService.getCurrentSorteo();
-
+      
+      console.log(`📝 Sorteo anterior: ${previousSorteo}`);
+      console.log(`🎯 Sorteo actual: ${this.currentSorteo?.name}`);
 
       if (this.currentSorteo) {
         this.isSorteoOpen = this.sorteoService.isSorteoOpen(this.currentSorteo);
         this.timeUntilClose = this.sorteoService.getTimeUntilClose(this.currentSorteo);
-
+        
+        console.log(`✅ Sorteo ${this.currentSorteo.name} - Estado: ${this.isSorteoOpen ? 'ABIERTO' : 'CERRADO'}`);
+        console.log(`⏰ Tiempo hasta cierre: ${this.timeUntilClose}`);
       } else {
         this.isSorteoOpen = false;
         this.timeUntilClose = '';
+        console.log('❌ No hay sorteo activo disponible');
       }
     } catch (error) {
+      console.error('❌ Error actualizando información del sorteo:', error);
     }
   }
 
@@ -318,8 +326,23 @@ export class SucursalComponent implements OnInit, OnDestroy {
     this.notificationService.showLoading('Procesando venta...');
 
     try {
-      // Obtener el siguiente correlativo para esta sucursal
+      // PASO 1: Refrescar información del sorteo actual antes de crear la venta
+      console.log('🔄 Actualizando información del sorteo antes de crear venta...');
+      await this.updateSorteoInfo();
+      
+      // PASO 2: Verificar que tenemos un sorteo válido
+      if (!this.currentSorteo) {
+        console.error('❌ No hay sorteo activo disponible');
+        this.notificationService.showError('No hay sorteo activo disponible');
+        this.isLoading = false;
+        this.notificationService.hideLoading();
+        return;
+      }
+      
+      console.log(`✅ Sorteo activo confirmado: ${this.currentSorteo.name} (${this.currentSorteo.label})`);
+      console.log(`🕐 Estado del sorteo: ${this.isSorteoOpen ? 'ABIERTO' : 'CERRADO'}`);
 
+      // Obtener el siguiente correlativo para esta sucursal
       const correlativo = await this.supabaseService.getNextCorrelativo(this.currentUser.sucursal);
 
       // Generar número de recibo con correlativo
@@ -328,12 +351,15 @@ export class SucursalComponent implements OnInit, OnDestroy {
       const sale: any = {
         userId: this.currentUser.id,
         sucursal: this.currentUser.sucursal,
-        sorteo: this.currentSorteo.name,
+        sorteo: this.currentSorteo.name, // ← Usar el sorteo actual refrescado
         fecha: this.supabaseService.getHondurasDateTime(),
         total: this.getTotal(),
         numeroRecibo: numeroRecibo,
         correlativo: correlativo
       };
+      
+      console.log(`💾 Creando venta para sorteo: "${sale.sorteo}"`);
+      console.log('📊 Datos de la venta:', sale);
 
 
       const saleId = await this.supabaseService.createSale(sale);

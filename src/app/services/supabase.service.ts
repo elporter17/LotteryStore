@@ -3680,44 +3680,45 @@ export class SupabaseService {
    */
   async getSorteoSchedules(): Promise<SorteoSchedule[]> {
     try {
+      console.log('🔍 Consultando horarios de sorteos en BD...');
+      
       const { data, error } = await this.supabase
         .from('sorteo_schedules')
         .select('*')
         .order('name');
 
       if (error) {
-        console.error('Error obteniendo horarios de sorteos:', error);
-        // Fallback a los horarios por defecto si hay error
-        return [
-          { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
-          { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
-          { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
-        ];
+        console.error('❌ Error obteniendo horarios de sorteos:', error);
+        throw error;
       }
+
+      console.log('📊 Datos obtenidos de BD:', data);
 
       if (!data || data.length === 0) {
-        console.warn('No se encontraron horarios en sorteo_schedules, usando valores por defecto');
-        return [
-          { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
-          { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
-          { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
-        ];
+        console.warn('⚠️ No se encontraron horarios en sorteo_schedules');
+        throw new Error('No se encontraron horarios en la base de datos');
       }
 
-      return data.map(schedule => ({
+      // Mapear los datos de BD al formato esperado
+      const schedules: SorteoSchedule[] = data.map(schedule => ({
         name: schedule.name as 'mañana' | 'tarde' | 'noche',
         label: schedule.label || schedule.name,
-        closeTime: schedule.close_time || '9:15',
-        openTime: schedule.open_time || '00:47'
+        closeTime: schedule.close_time, // BD usa close_time
+        openTime: schedule.open_time    // BD usa open_time
       })).filter(schedule => schedule.name && schedule.closeTime && schedule.openTime);
 
+      console.log('✅ Horarios mapeados correctamente:', schedules);
+      return schedules;
+
     } catch (error) {
-      console.error('Error en getSorteoSchedules:', error);
-      // Fallback a los horarios por defecto en caso de error
+      console.error('❌ Error en getSorteoSchedules:', error);
+      console.log('🔄 Usando horarios actualizados de BD como fallback');
+      
+      // Fallback con los horarios reales de tu BD
       return [
-        { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
-        { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
-        { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+        { name: 'mañana', label: 'Mañana', closeTime: '10:55', openTime: '05:00' },
+        { name: 'tarde', label: 'Tarde', closeTime: '15:00', openTime: '11:00' },
+        { name: 'noche', label: 'Noche', closeTime: '23:00', openTime: '14:55' }
       ];
     }
   }
