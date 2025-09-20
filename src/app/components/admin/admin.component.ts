@@ -5,7 +5,7 @@ import { NotificationService } from '../../services/notification.service';
 import { PrintService } from '../../services/print.service';
 import { ExportService, ReportData } from '../../services/export.service';
 import { Router } from '@angular/router';
-import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES, SucursalFactor } from '../../models/interfaces';
+import { SorteoSchedule, Sale, SaleDetail, Sorteo, SucursalFactor } from '../../models/interfaces';
 
 @Component({
   selector: 'app-admin',
@@ -14,7 +14,7 @@ import { SorteoSchedule, Sale, SaleDetail, Sorteo, SORTEO_SCHEDULES, SucursalFac
 })
 export class AdminComponent implements OnInit {
   currentUser: any = null;
-  sorteos = SORTEO_SCHEDULES; // Usar directamente las interfaces en lugar de base de datos
+  sorteos: SorteoSchedule[] = []; // Se cargará desde la base de datos
   sales: Sale[] = [];
   saleDetails: { [saleId: string]: SaleDetail[] } = {};
   sorteosData: { [key: string]: Sorteo } = {};
@@ -49,7 +49,7 @@ export class AdminComponent implements OnInit {
   showSorteoModal: boolean = false;
   editingSorteo: any = null;
 
-  sorteoSchedules: SorteoSchedule[] = [...SORTEO_SCHEDULES];
+  sorteoSchedules: SorteoSchedule[] = []; // Se cargará desde la base de datos
 
   // Propiedades para cambio de contraseña
   showPasswordModal: boolean = false;
@@ -167,7 +167,7 @@ export class AdminComponent implements OnInit {
     this.loadSales();
     this.loadSorteosData(); // Cargar datos de sorteos existentes
     this.initializeUsers();
-    this.loadSorteoSchedules(); // Ya no es async
+    this.loadSorteoSchedules(); // Ahora es async
   }
 
   private async sorteosHechos(): Promise<void> {
@@ -861,12 +861,26 @@ export class AdminComponent implements OnInit {
     }
   }
 
-  loadSorteoSchedules(): void {
-    this.sorteoSchedules = [...SORTEO_SCHEDULES];
+  async loadSorteoSchedules(): Promise<void> {
+    try {
+      this.sorteoSchedules = await this.supabaseService.getSorteoSchedules();
+      this.sorteos = this.sorteoSchedules; // Sincronizar ambas variables
 
-    if (this.sorteoSchedules.length === 0) {
-      this.notificationService.showError('No se encontraron horarios de sorteos configurados');
-    } else {
+      if (this.sorteoSchedules.length === 0) {
+        this.notificationService.showError('No se encontraron horarios de sorteos configurados');
+      } else {
+        console.log('Horarios de sorteos cargados:', this.sorteoSchedules);
+      }
+    } catch (error) {
+      console.error('Error cargando horarios de sorteos:', error);
+      this.notificationService.showError('Error al cargar horarios de sorteos');
+      // Fallback a valores por defecto en caso de error
+      this.sorteoSchedules = [
+        { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+        { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+        { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+      ];
+      this.sorteos = this.sorteoSchedules;
     }
   }
 
@@ -1315,7 +1329,7 @@ export class AdminComponent implements OnInit {
       // Manejar ambos tipos de parámetros
       if (typeof sorteoOrName === 'string') {
         // Llamada desde la interfaz del sorteo (solo nombre y número)
-        const sorteoSchedule = SORTEO_SCHEDULES.find(s => s.name === sorteoOrName);
+        const sorteoSchedule = this.sorteos.find((s: SorteoSchedule) => s.name === sorteoOrName);
         if (sorteoSchedule) {
           this.currentSorteoForFactors = {
             sorteo: sorteoSchedule,

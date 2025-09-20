@@ -1,12 +1,12 @@
 ﻿import { Injectable } from '@angular/core';
-import { SORTEO_SCHEDULES, SorteoSchedule } from '../models/interfaces';
+import { SorteoSchedule } from '../models/interfaces';
 import { SupabaseService } from './supabase.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class SorteoService {
-  private sorteoSchedules: SorteoSchedule[] = [...SORTEO_SCHEDULES];
+  private sorteoSchedules: SorteoSchedule[] = [];
 
   constructor(private supabaseService: SupabaseService) {
     this.loadSorteoSchedules();
@@ -14,24 +14,17 @@ export class SorteoService {
 
   private async loadSorteoSchedules(): Promise<void> {
     try {
-      // Usar siempre los horarios definidos en las interfaces
-      this.sorteoSchedules = [...SORTEO_SCHEDULES];
-
-      // Opcionalmente, si quieres usar horarios dinámicos de la BD, descomenta:
-      /*
-      const dynamicSchedules = await this.supabaseService.getSorteoSchedules();
-      
-      if (dynamicSchedules.length > 0) {
-        this.sorteoSchedules = dynamicSchedules.map(schedule => ({
-          name: schedule.name,
-          label: schedule.label,
-          closeTime: schedule.close_time  // Mapear de close_time a closeTime
-        }));
-      }
-      */
+      // Cargar horarios desde la base de datos
+      this.sorteoSchedules = await this.supabaseService.getSorteoSchedules();
+      console.log('Horarios cargados en SorteoService:', this.sorteoSchedules);
     } catch (error) {
+      console.error('Error cargando horarios en SorteoService:', error);
       // Mantener los horarios por defecto en caso de error
-      this.sorteoSchedules = [...SORTEO_SCHEDULES];
+      this.sorteoSchedules = [
+        { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+        { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+        { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+      ];
     }
   }
 

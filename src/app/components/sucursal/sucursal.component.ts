@@ -640,6 +640,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     // Verificar si estamos en un período activo de ventas
     for (const sorteo of sorteos) {
+      // Validar que los tiempos existan antes de hacer split
+      if (!sorteo.openTime || !sorteo.closeTime) {
+        console.warn('Sorteo con tiempos inválidos:', sorteo);
+        continue;
+      }
+
       const [openHour, openMinute] = sorteo.openTime.split(':').map(Number);
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
 
@@ -712,6 +718,13 @@ export class SucursalComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Validar que closeTime exista antes de hacer split
+    if (!activeSorteo.closeTime) {
+      console.warn('Sorteo activo sin closeTime:', activeSorteo);
+      this.isBlocked = false;
+      return;
+    }
+
     // Hora de cierre del sorteo activo
     const [closeHourStr, closeMinuteStr] = activeSorteo.closeTime.split(':');
     const closeTotalMinutes = parseInt(closeHourStr, 10) * 60 + parseInt(closeMinuteStr, 10);
@@ -761,6 +774,12 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     // Buscar el próximo sorteo del mismo día
     for (const sorteo of sorteos) {
+      // Validar que openTime exista antes de hacer split
+      if (!sorteo.openTime) {
+        console.warn('Sorteo sin openTime:', sorteo);
+        continue;
+      }
+
       const [openHour, openMinute] = sorteo.openTime.split(':').map(Number);
       const openTimeInMinutes = openHour * 60 + openMinute;
 
@@ -775,7 +794,10 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
   // Método para calcular el tiempo hasta la próxima apertura
   private calculateTimeUntilOpening(currentTotalMinutes: number, nextSorteo: any): string {
-    if (!nextSorteo) return '';
+    if (!nextSorteo || !nextSorteo.openTime) {
+      console.warn('nextSorteo inválido o sin openTime:', nextSorteo);
+      return '';
+    }
 
     const [openHour, openMinute] = nextSorteo.openTime.split(':').map(Number);
     const openTimeInMinutes = openHour * 60 + openMinute;
@@ -1160,6 +1182,12 @@ Revisa la consola para más detalles.`);
 
     // Encontrar el sorteo activo basado en los horarios configurados
     for (const sorteo of sorteos) {
+      // Validar que los tiempos existan antes de hacer split
+      if (!sorteo.openTime || !sorteo.closeTime) {
+        console.warn('Sorteo con tiempos inválidos en getCurrentSorteoTab:', sorteo);
+        continue;
+      }
+
       const [openHour, openMinute] = sorteo.openTime.split(':').map(Number);
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
 
@@ -1223,6 +1251,12 @@ Revisa la consola para más detalles.`);
     let minTimeSinceClosure = Infinity;
 
     for (const sorteo of sorteos) {
+      // Validar que closeTime exista antes de hacer split
+      if (!sorteo.closeTime) {
+        console.warn('Sorteo sin closeTime en getRecentlyClosedSorteo:', sorteo);
+        continue;
+      }
+
       const [closeHour, closeMinute] = sorteo.closeTime.split(':').map(Number);
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
 

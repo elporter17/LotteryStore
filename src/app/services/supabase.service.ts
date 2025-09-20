@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
-import { User, Sale, SaleDetail, Sorteo, SorteoSchedule, SORTEO_SCHEDULES, SucursalFactor } from '../models/interfaces';
+import { User, Sale, SaleDetail, Sorteo, SorteoSchedule, SucursalFactor } from '../models/interfaces';
 import { Observable, BehaviorSubject, Subject } from 'rxjs';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz';
@@ -1384,24 +1384,6 @@ export class SupabaseService {
   // GESTIÓN DE SORTEOS
   // ========================
 
-  async getSorteoSchedules(): Promise<any[]> {
-    try {
-
-      const { data, error } = await this.supabase
-        .from('sorteo_schedules')
-        .select('*')
-        .order('close_time', { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
-      return data || [];
-    } catch (error) {
-      throw error;
-    }
-  }
-
   async createSorteoSchedule(sorteoData: { name: string, label: string, close_time: string }): Promise<any> {
     try {
       const { data, error } = await this.supabase
@@ -1462,7 +1444,11 @@ export class SupabaseService {
   async initializeSorteoSchedules(): Promise<void> {
     try {
       // Crear los sorteos por defecto si no existen
-      const defaultSorteos: SorteoSchedule[] = [...SORTEO_SCHEDULES];
+      const defaultSorteos: SorteoSchedule[] = [
+        { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+        { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+        { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+      ];
 
       for (const sorteo of defaultSorteos) {
         const { error } = await this.supabase
@@ -1470,10 +1456,13 @@ export class SupabaseService {
           .upsert(sorteo, { onConflict: 'name' });
 
         if (error) {
+          console.error('Error insertando sorteo schedule:', error);
         } else {
+          console.log(`Sorteo schedule ${sorteo.name} inicializado`);
         }
       }
     } catch (error) {
+      console.error('Error inicializando sorteo schedules:', error);
     }
   }
 
@@ -3007,23 +2996,38 @@ export class SupabaseService {
 
   private async calcularResumenCajaManual(fecha: Date, sucursal: string): Promise<any> {
     try {
-      const startOfDay = this.getStartOfDayHonduras(fecha);
-      const endOfDay = this.getEndOfDayHonduras(fecha);
+      // Obtener el último cierre para esta sucursal
+      const ultimoCierre = await this.obtenerUltimoCierreDiario(sucursal);
+      
+      let fechaDesde: Date;
+      let fechaHasta: Date;
+      
+      if (ultimoCierre) {
+        // Si existe un cierre previo, calcular desde esa fecha/hora hasta ahora
+        fechaDesde = ultimoCierre.createdAt; // Desde cuando se hizo el último cierre
+        fechaHasta = this.getEndOfDayHonduras(fecha); // Hasta el final del día actual
+        console.log(`Calculando desde último cierre: ${ultimoCierre.createdAt} hasta: ${fechaHasta}`);
+      } else {
+        // Si no hay cierres previos, calcular todo el día
+        fechaDesde = this.getStartOfDayHonduras(fecha);
+        fechaHasta = this.getEndOfDayHonduras(fecha);
+        console.log(`No hay cierres previos. Calculando todo el día: ${fechaDesde} hasta: ${fechaHasta}`);
+      }
 
-      // Calcular total vendido
+      // Calcular total vendido desde el último cierre (o inicio del día si no hay cierres)
       const { data: salesData, error: salesError } = await this.supabase
         .from('sales')
         .select('total')
         .eq('sucursal', sucursal)
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+        .gt('created_at', this.formatLocalDateForSupabase(fechaDesde)) // Usar created_at para mayor precisión
+        .lte('created_at', this.formatLocalDateForSupabase(fechaHasta));
 
       if (salesError) throw salesError;
 
       const totalVendido = (salesData || []).reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+      console.log(`Total vendido desde último cierre: ${totalVendido}, registros: ${salesData?.length || 0}`);
 
       // El total_pagado ahora se calcula solo desde los movimientos de caja reales (pagos efectivos)
-      // Ya no se resta automáticamente desde sorteos cerrados
       // Solo se contabiliza cuando efectivamente se paga el premio en el cierre
       const { data: pagosSorteosData, error: pagosSorteosError } = await this.supabase
         .from('movimientos_caja')
@@ -3031,20 +3035,20 @@ export class SupabaseService {
         .eq('sucursal', sucursal)
         .eq('tipo', 'salida')
         .not('sorteoId', 'is', null) // Solo movimientos que son pagos de sorteos
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+        .gt('created_at', this.formatLocalDateForSupabase(fechaDesde))
+        .lte('created_at', this.formatLocalDateForSupabase(fechaHasta));
 
       if (pagosSorteosError) throw pagosSorteosError;
 
       const totalPagado = (pagosSorteosData || []).reduce((sum, pago) => sum + parseFloat(pago.monto || '0'), 0);
 
-      // Calcular movimientos de caja
+      // Calcular movimientos de caja desde el último cierre
       const { data: movimientosData, error: movimientosError } = await this.supabase
         .from('movimientos_caja')
         .select('tipo, monto')
         .eq('sucursal', sucursal)
-        .gte('fecha', this.formatLocalDateForSupabase(startOfDay))
-        .lte('fecha', this.formatLocalDateForSupabase(endOfDay));
+        .gt('created_at', this.formatLocalDateForSupabase(fechaDesde))
+        .lte('created_at', this.formatLocalDateForSupabase(fechaHasta));
 
       if (movimientosError) throw movimientosError;
 
@@ -3148,35 +3152,37 @@ export class SupabaseService {
         });
       });
 
-      // 5. Armar respuesta final
-      return sorteosPendientes.map(sorteo => {
-        const numeroGanador = parseInt(sorteo.numero_ganador);
-        const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 75);
-        const totalOriginal = parseFloat(sorteo.total_pagado || '0');
+      // 5. Armar respuesta final - EXCLUIR sorteos ya pagados
+      return sorteosPendientes
+        .filter(sorteo => !sorteosPagados.has(sorteo.id)) // Filtrar sorteos ya pagados
+        .map(sorteo => {
+          const numeroGanador = parseInt(sorteo.numero_ganador);
+          const factorMultiplicador = parseFloat(sorteo.factor_multiplicador || 75);
+          const totalOriginal = parseFloat(sorteo.total_pagado || '0');
 
-        let cantidadCompradaNumeroGanador = 0;
-        if (ventasPorSorteo.has(sorteo.sorteo)) {
-          cantidadCompradaNumeroGanador = ventasPorSorteo.get(sorteo.sorteo).get(numeroGanador) || 0;
-        }
-
-        const totalCalculadoPagar = cantidadCompradaNumeroGanador * factorMultiplicador;
-
-        return {
-          ...sorteo,
-          cantidad_comprada_numero_ganador: cantidadCompradaNumeroGanador,
-          total_calculado_pagar: totalCalculadoPagar,
-          factor_multiplicador: factorMultiplicador,
-          ya_pagado: sorteosPagados.has(sorteo.id),
-          calculo_detalle: {
-            cantidad_comprada: cantidadCompradaNumeroGanador,
-            factor: factorMultiplicador,
-            total_calculado: totalCalculadoPagar,
-            total_original: totalOriginal,
-            diferencia: Math.abs(totalCalculadoPagar - totalOriginal),
-            coincide: Math.abs(totalCalculadoPagar - totalOriginal) < 0.01
+          let cantidadCompradaNumeroGanador = 0;
+          if (ventasPorSorteo.has(sorteo.sorteo)) {
+            cantidadCompradaNumeroGanador = ventasPorSorteo.get(sorteo.sorteo).get(numeroGanador) || 0;
           }
-        };
-      });
+
+          const totalCalculadoPagar = cantidadCompradaNumeroGanador * factorMultiplicador;
+
+          return {
+            ...sorteo,
+            cantidad_comprada_numero_ganador: cantidadCompradaNumeroGanador,
+            total_calculado_pagar: totalCalculadoPagar,
+            factor_multiplicador: factorMultiplicador,
+            ya_pagado: false, // Ya no necesitamos esta marca porque los pagados están excluidos
+            calculo_detalle: {
+              cantidad_comprada: cantidadCompradaNumeroGanador,
+              factor: factorMultiplicador,
+              total_calculado: totalCalculadoPagar,
+              total_original: totalOriginal,
+              diferencia: Math.abs(totalCalculadoPagar - totalOriginal),
+              coincide: Math.abs(totalCalculadoPagar - totalOriginal) < 0.01
+            }
+          };
+        });
     } catch (error) {
       console.error('Error al obtener sorteos pendientes de pago:', error);
       return [];
@@ -3272,6 +3278,7 @@ export class SupabaseService {
   async registrarCierreDiario(cierre: Partial<import('../models/interfaces').CierreDiario>): Promise<void> {
     try {
       const fechaStr = this.formatDateOnlyForSupabase(cierre.fecha!);
+      const hondurasDateTime = this.getHondurasDateTime();
       
       // Insertar un nuevo registro de cierre cada vez
       const { data, error } = await this.supabase
@@ -3289,7 +3296,7 @@ export class SupabaseService {
           sorteos_manana: cierre.sorteosMañana,
           sorteos_tarde: cierre.sorteosTarde,
           sorteos_noche: cierre.sorteosNoche,
-          created_at: new Date().toISOString() // Asegurar que se registre la fecha/hora exacta
+          created_at: this.formatLocalDateForSupabase(hondurasDateTime) // Usar hora local de Honduras
         });
 
       if (error) throw error;
@@ -3507,6 +3514,55 @@ export class SupabaseService {
     } catch (error) {
       console.error('Error cargando datos de cierre de caja:', error);
       throw error;
+    }
+  }
+
+  // ============= MÉTODOS PARA SORTEO SCHEDULES =============
+
+  /**
+   * Obtener horarios de sorteos desde la tabla sorteo_schedules
+   */
+  async getSorteoSchedules(): Promise<SorteoSchedule[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('sorteo_schedules')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error obteniendo horarios de sorteos:', error);
+        // Fallback a los horarios por defecto si hay error
+        return [
+          { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+          { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+          { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+        ];
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('No se encontraron horarios en sorteo_schedules, usando valores por defecto');
+        return [
+          { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+          { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+          { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+        ];
+      }
+
+      return data.map(schedule => ({
+        name: schedule.name as 'mañana' | 'tarde' | 'noche',
+        label: schedule.label || schedule.name,
+        closeTime: schedule.close_time || '9:15',
+        openTime: schedule.open_time || '00:47'
+      })).filter(schedule => schedule.name && schedule.closeTime && schedule.openTime);
+
+    } catch (error) {
+      console.error('Error en getSorteoSchedules:', error);
+      // Fallback a los horarios por defecto en caso de error
+      return [
+        { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+        { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+        { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+      ];
     }
   }
 

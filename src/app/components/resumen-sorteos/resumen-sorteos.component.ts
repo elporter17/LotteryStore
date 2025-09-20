@@ -2,7 +2,7 @@ import { Component, OnInit, ViewChild, ElementRef, OnDestroy } from '@angular/co
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { SupabaseService } from '../../services/supabase.service';
-import { SorteoSchedule, SORTEO_SCHEDULES } from '../../models/interfaces';
+import { SorteoSchedule } from '../../models/interfaces';
 
 @Component({
   selector: 'app-resumen-sorteos',
@@ -12,7 +12,7 @@ import { SorteoSchedule, SORTEO_SCHEDULES } from '../../models/interfaces';
   styleUrl: './resumen-sorteos.component.scss'
 })
 export class ResumenSorteosComponent implements OnInit, OnDestroy {
-  sorteos = SORTEO_SCHEDULES;
+  sorteos: SorteoSchedule[] = [];
   resumenPorSorteo: { [sorteoName: string]: any[] } = {};
   ventasPorNumero: { [sorteoName: string]: { [numero: string]: number } } = {};
   isLoading: boolean = false;
@@ -22,7 +22,10 @@ export class ResumenSorteosComponent implements OnInit, OnDestroy {
     private supabaseService: SupabaseService
   ) { }
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
+    // Cargar horarios de sorteos desde la base de datos
+    await this.loadSorteoSchedules();
+    
     this.loadResumenesSorteos();
     
     // Suscribirse a eventos de recarga desde otros componentes
@@ -34,6 +37,21 @@ export class ResumenSorteosComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.subscription) {
       this.subscription.unsubscribe();
+    }
+  }
+
+  async loadSorteoSchedules(): Promise<void> {
+    try {
+      this.sorteos = await this.supabaseService.getSorteoSchedules();
+      console.log('Sorteos cargados en resumen-sorteos:', this.sorteos);
+    } catch (error) {
+      console.error('Error cargando sorteos en resumen-sorteos:', error);
+      // Fallback a valores por defecto
+      this.sorteos = [
+        { name: 'mañana', label: 'Mañana', closeTime: '9:15', openTime: '00:47' },
+        { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
+        { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
+      ];
     }
   }
 
@@ -186,7 +204,7 @@ export class ResumenSorteosComponent implements OnInit, OnDestroy {
 
   // Función para obtener sorteos con resumen (solo los cerrados)
   getSorteosConResumen(): SorteoSchedule[] {
-    return this.sorteos.filter(sorteo => this.hasResumenSorteo(sorteo.name));
+    return this.sorteos.filter((sorteo: SorteoSchedule) => this.hasResumenSorteo(sorteo.name));
   }
 
   // Métodos para manejar ventas por número

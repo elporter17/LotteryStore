@@ -66,11 +66,15 @@ export interface SorteoSchedule {
   openTime: string; // "06:00", "13:00", "20:00"
 }
 
+// Constante SORTEO_SCHEDULES comentada - ahora se obtiene desde la base de datos
+// usando el método getSorteoSchedules() del SupabaseService
+/*
 export const SORTEO_SCHEDULES: SorteoSchedule[] = [
   { name: 'mañana', label: 'Mañana', closeTime: '9:15' , openTime: '00:47' },
   { name: 'tarde', label: 'Tarde', closeTime: '18:00', openTime: '9:18' },
   { name: 'noche', label: 'Noche', closeTime: '20:40', openTime: '16:00' }
 ];
+*/
 
 export interface ResumenCaja {
     sorteo: string; // puedes incluir más propiedades si es necesario
