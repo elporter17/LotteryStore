@@ -2120,23 +2120,23 @@ export class AdminComponent implements OnInit {
     `;
 
     // Agregar sorteos pendientes
-    if (this.sorteosPendientesPagoSucursal.length > 0) {
-      contenido += `
-        <div style="border-bottom: 1px solid #ccc; margin: 10px 0;">
-          <h3>SORTEOS PENDIENTES DE PAGO</h3>
-      `;
+    // if (this.sorteosPendientesPagoSucursal.length > 0) {
+    //   contenido += `
+    //     <div style="border-bottom: 1px solid #ccc; margin: 10px 0;">
+    //       <h3>SORTEOS PENDIENTES DE PAGO</h3>
+    //   `;
 
-      this.sorteosPendientesPagoSucursal.forEach(sorteo => {
-        contenido += `
-          <p>${sorteo.sorteo.toUpperCase()}: 
-             Ganador ${sorteo.numero_ganador} - 
-             A pagar: L ${sorteo.total_pagado?.toFixed(2) || '0.00'}
-          </p>
-        `;
-      });
+    //   this.sorteosPendientesPagoSucursal.forEach(sorteo => {
+    //     contenido += `
+    //       <p>${sorteo.sorteo.toUpperCase()}: 
+    //          Ganador ${sorteo.numero_ganador} - 
+    //          A pagar: L ${sorteo.total_pagado?.toFixed(2) || '0.00'}
+    //       </p>
+    //     `;
+    //   });
 
-      contenido += `</div>`;
-    }
+    //   contenido += `</div>`;
+    // }
 
     // Agregar movimientos del día
     if (this.movimientosCajaSucursal.length > 0) {
