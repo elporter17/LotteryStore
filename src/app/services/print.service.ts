@@ -77,10 +77,18 @@ export class PrintService {
       // Detalles
       let total = 0;
       for (const detail of details) {
+        // Hacer los números de lotería más grandes y en negrita
+        pdf.setFontSize(18);
+        pdf.setFont('helvetica', 'bold');
         pdf.text(detail.numero.toString().padStart(2, '0'), 20, y, { align: 'center' });
+        
+        // Hacer los montos más grandes y en negrita
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
         pdf.text(`L ${detail.monto}`, 60, y, { align: 'center' });
+        
         total += detail.monto;
-        y += lineHeight;
+        y += lineHeight + 3; // Aumentar el espaciado entre líneas
       }
 
       // Línea
@@ -89,8 +97,11 @@ export class PrintService {
       y += lineHeight;
 
       // Total
-      pdf.setFontSize(12);
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
       pdf.text('Total a pagar:', 10, y);
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
       pdf.text(`L ${total}`, 70, y, { align: 'right' });
       y += lineHeight + 2;
 
@@ -209,18 +220,29 @@ export class PrintService {
 
       let total = 0;
       for (const detail of details) {
+        // Hacer los números de lotería más grandes y en negrita
+        pdf.setFontSize(18);
+        pdf.setFont('helvetica', 'bold');
         pdf.text(detail.numero.toString().padStart(2, '0'), 20, y, { align: 'center' });
+        
+        // Hacer los montos más grandes y en negrita
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
         pdf.text(`L ${detail.monto}`, 60, y, { align: 'center' });
+        
         total += detail.monto;
-        y += lineHeight;
+        y += lineHeight + 3; // Aumentar el espaciado entre líneas
       }
 
       y += 2;
       pdf.line(5, y, 75, y);
       y += lineHeight;
 
-      pdf.setFontSize(12);
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
       pdf.text('Total a pagar:', 10, y);
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
       pdf.text(`L ${total}`, 70, y, { align: 'right' });
       y += lineHeight + 2;
 

@@ -135,118 +135,62 @@
 
   </div>
 
-  <!-- TABS DE SORTEOS -->
-  <div class="sorteos-tabs-section">
-    <div class="tabs-header">
-      <button class="tab-btn" 
-              [class.active]="activeTab === 'mañana'"
-              (click)="setActiveTab('mañana')">
-        <i class="fas fa-sun"></i> Mañana
-      </button>
-      <button class="tab-btn" 
-              [class.active]="activeTab === 'tarde'"
-              (click)="setActiveTab('tarde')">
-        <i class="fas fa-cloud-sun"></i> Tarde
-      </button>
-      <button class="tab-btn" 
-              [class.active]="activeTab === 'noche'"
-              (click)="setActiveTab('noche')">
-        <i class="fas fa-moon"></i> Noche
-      </button>
+  <!-- VISTA UNIFICADA DE BALANCE Y NÚMEROS GANADORES -->
+  <div class="unified-summary-section">
+    <!-- Balance Final Unificado -->
+    <div class="balance-final-card">
+      <div class="balance-header">
+        <i class="fas fa-calculator"></i>
+        <h3>Balance Final</h3>
+      </div>
+      <div class="balance-amount">
+        L {{ getBalanceFinal().toFixed(2) }}
+      </div>
+      <div class="balance-description">
+        Desde último cierre hasta ahora
+      </div>
     </div>
 
-    <div class="tab-content">
-      <!-- Tab Mañana -->
-      <div *ngIf="activeTab === 'mañana'" class="tab-panel">
-        <div class="sorteo-summary">
-          <div class="summary-card">
-            <div class="summary-label">Total Vendido</div>
-            <div class="summary-value">L {{ getSorteoTotalVendido('mañana').toFixed(2) }}</div>
-          </div>
-          <div class="summary-card winner-card" *ngIf="getSorteoNumeroGanador('mañana') !== null">
-            <div class="summary-label">Número Ganador</div>
-            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('mañana')!.toString().padStart(2, '0') }}</div>
-          </div>
-          <div class="summary-card payout-card" *ngIf="getSorteoTotalPagar('mañana') > 0">
-            <div class="summary-label">Total a Pagar</div>
-            <div class="summary-value payout">L {{ getSorteoTotalPagar('mañana').toFixed(2) }}</div>
-          </div>
-        </div>
-        
-        <!-- <div class="numeros-vendidos">
-          <h5>Números Vendidos</h5>
-          <div *ngIf="getSorteoNumerosVendidos('mañana').length > 0" class="numeros-grid">
-            <div *ngFor="let numero of getSorteoNumerosVendidos('mañana')" class="numero-vendido-item">
-              <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
-              <span class="monto">L {{ numero.total.toFixed(0) }}</span>
-            </div>
-          </div>
-          <div *ngIf="getSorteoNumerosVendidos('mañana').length === 0" class="no-data">
-            <p>No hay números vendidos para este sorteo</p>
-          </div>
-        </div> -->
+    <!-- Números Ganadores del Día -->
+    <div class="winning-numbers-section">
+      <div class="section-header">
+        <i class="fas fa-trophy"></i>
+        <h3>Números Ganadores del Día</h3>
       </div>
-
-      <!-- Tab Tarde -->
-      <div *ngIf="activeTab === 'tarde'" class="tab-panel">
-        <div class="sorteo-summary">
-          <div class="summary-card">
-            <div class="summary-label">Total Vendido</div>
-            <div class="summary-value">L {{ getSorteoTotalVendido('tarde').toFixed(2) }}</div>
+      
+      <div class="winning-numbers-grid">
+        <!-- Mañana -->
+        <div class="winner-row">
+          <div class="sorteo-info">
+            <i class="fas fa-sun"></i>
+            <span class="sorteo-name">Mañana</span>
           </div>
-          <div class="summary-card winner-card" *ngIf="getSorteoNumeroGanador('tarde') !== null">
-            <div class="summary-label">Número Ganador</div>
-            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('tarde')!.toString().padStart(2, '0') }}</div>
-          </div>
-          <div class="summary-card payout-card" *ngIf="getSorteoTotalPagar('tarde') > 0">
-            <div class="summary-label">Total a Pagar</div>
-            <div class="summary-value payout">L {{ getSorteoTotalPagar('tarde').toFixed(2) }}</div>
+          <div class="winner-number" [class.pending]="!tieneNumeroGanador('mañana')">
+            {{ getNumeroGanadorOPendiente('mañana') }}
           </div>
         </div>
-        
-        <!-- <div class="numeros-vendidos">
-          <h5>Números Vendidos</h5>
-          <div *ngIf="getSorteoNumerosVendidos('tarde').length > 0" class="numeros-grid">
-            <div *ngFor="let numero of getSorteoNumerosVendidos('tarde')" class="numero-vendido-item">
-              <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
-              <span class="monto">L {{ numero.total.toFixed(0) }}</span>
-            </div>
-          </div>
-          <div *ngIf="getSorteoNumerosVendidos('tarde').length === 0" class="no-data">
-            <p>No hay números vendidos para este sorteo</p>
-          </div>
-        </div> -->
-      </div>
 
-      <!-- Tab Noche -->
-      <div *ngIf="activeTab === 'noche'" class="tab-panel">
-        <div class="sorteo-summary">
-          <div class="summary-card">
-            <div class="summary-label">Total Vendido</div>
-            <div class="summary-value">L {{ getSorteoTotalVendido('noche').toFixed(2) }}</div>
+        <!-- Tarde -->
+        <div class="winner-row">
+          <div class="sorteo-info">
+            <i class="fas fa-cloud-sun"></i>
+            <span class="sorteo-name">Tarde</span>
           </div>
-          <div class="summary-card winner-card" *ngIf="getSorteoNumeroGanador('noche') !== null">
-            <div class="summary-label">Número Ganador</div>
-            <div class="summary-value winner-number">{{ getSorteoNumeroGanador('noche')!.toString().padStart(2, '0') }}</div>
-          </div>
-          <div class="summary-card payout-card" *ngIf="getSorteoTotalPagar('noche') > 0">
-            <div class="summary-label">Total a Pagar</div>
-            <div class="summary-value payout">L {{ getSorteoTotalPagar('noche').toFixed(2) }}</div>
+          <div class="winner-number" [class.pending]="!tieneNumeroGanador('tarde')">
+            {{ getNumeroGanadorOPendiente('tarde') }}
           </div>
         </div>
-        
-        <!-- <div class="numeros-vendidos">
-          <h5>Números Vendidos</h5>
-          <div *ngIf="getSorteoNumerosVendidos('noche').length > 0" class="numeros-grid">
-            <div *ngFor="let numero of getSorteoNumerosVendidos('noche')" class="numero-vendido-item">
-              <span class="numero">{{ numero.numero.toString().padStart(2, '0') }}</span>
-              <span class="monto">L {{ numero.total.toFixed(0) }}</span>
-            </div>
+
+        <!-- Noche -->
+        <div class="winner-row">
+          <div class="sorteo-info">
+            <i class="fas fa-moon"></i>
+            <span class="sorteo-name">Noche</span>
           </div>
-          <div *ngIf="getSorteoNumerosVendidos('noche').length === 0" class="no-data">
-            <p>No hay números vendidos para este sorteo</p>
+          <div class="winner-number" [class.pending]="!tieneNumeroGanador('noche')">
+            {{ getNumeroGanadorOPendiente('noche') }}
           </div>
-        </div> -->
+        </div>
       </div>
     </div>
   </div>

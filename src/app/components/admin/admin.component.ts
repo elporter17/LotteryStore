@@ -111,14 +111,13 @@ export class AdminComponent implements OnInit {
     // Recuperar filtros de localStorage o usar valores por defecto
     this.loadFilterState();
 
-    // Si no hay filtros guardados, usar fecha de Honduras para inicializar
-    if (!this.fechaDesde || !this.fechaHasta) {
-      const fechaInicio = this.supabaseService.getStartOfDayHonduras(hondurasToday);
-      const fechaFin = this.supabaseService.getEndOfDayHonduras(hondurasToday);
+    // SIEMPRE usar fecha actual de Honduras (sobrescribir filtros guardados)
+    const fechaInicio = this.supabaseService.getStartOfDayHonduras(hondurasToday);
+    const fechaFin = this.supabaseService.getEndOfDayHonduras(hondurasToday);
 
-      this.fechaDesde = this.supabaseService.formatDateTimeLocalHonduras(fechaInicio);
-      this.fechaHasta = this.supabaseService.formatDateTimeLocalHonduras(fechaFin);
-    }
+    this.fechaDesde = this.supabaseService.formatDateTimeLocalHonduras(fechaInicio);
+    this.fechaHasta = this.supabaseService.formatDateTimeLocalHonduras(fechaFin);
+    this.selectedDate = this.supabaseService.formatDateTimeLocalHonduras(hondurasToday).split('T')[0];
 
   }
 

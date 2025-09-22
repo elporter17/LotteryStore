@@ -58,6 +58,14 @@ export class SucursalComponent implements OnInit, OnDestroy {
   activeTab: 'mañana' | 'tarde' | 'noche' = 'mañana';
   sorteoData: { [key: string]: any } = {};
 
+  // Propiedades para vista unificada
+  balanceUnificado: any = null;
+  numerosGanadoresDelDia: { 
+    mañana: number | null, 
+    tarde: number | null, 
+    noche: number | null 
+  } = { mañana: null, tarde: null, noche: null };
+
   // Propiedades para la hora de Honduras
   currentHondurasTime: string = '';
 
@@ -203,6 +211,9 @@ export class SucursalComponent implements OnInit, OnDestroy {
     // Cargar sorteos cerrados para la nueva fecha
     const fecha = new Date(this.filterDate + 'T00:00:00');
     await this.loadSorteosCerrados(fecha);
+    // Cargar datos para vista unificada
+    await this.cargarBalanceUnificado();
+    await this.cargarNumerosGanadoresDelDia();
   }
 
   filterSales(): void {
@@ -939,6 +950,10 @@ Revisa la consola para más detalles.`);
       // Cargar datos con la fecha filtrada
       await this.loadSorteoDataOptimized(fecha, sucursal);
 
+      // Cargar datos para vista unificada
+      await this.cargarBalanceUnificado();
+      await this.cargarNumerosGanadoresDelDia();
+
       // Determinar y mostrar el tab activo
       this.activeTab = this.getCurrentSorteoTab();
       console.log('Datos de sorteos cargados:', this.sorteoData);
@@ -1450,5 +1465,93 @@ Revisa la consola para más detalles.`);
       return numerosVendidos[numeroGanador] * factor;
     }
     return 0;
+  }
+
+  // ================== MÉTODOS PARA VISTA UNIFICADA ==================
+
+  // Método para obtener el balance final unificado (misma lógica que cierre de caja)
+  async cargarBalanceUnificado(): Promise<void> {
+    try {
+      if (!this.currentUser?.sucursal) return;
+      
+      console.log('Cargando balance unificado para sucursal:', this.currentUser.sucursal);
+      
+      // Usar el mismo método que usa cierre de caja: calcularResumenCajaDiario
+      this.balanceUnificado = await this.supabaseService.calcularResumenCajaDiario(
+        new Date(),
+        this.currentUser.sucursal
+      );
+      
+      console.log('Balance unificado cargado:', this.balanceUnificado);
+    } catch (error) {
+      console.error('Error al cargar balance unificado:', error);
+      this.balanceUnificado = {
+        total_vendido: 0,
+        total_pagado: 0,
+        total_neto: 0,
+        movimientos_entrada: 0,
+        movimientos_salida: 0,
+        balance_final: 0
+      };
+    }
+  }
+
+  // Método para obtener los números ganadores del día actual
+  async cargarNumerosGanadoresDelDia(): Promise<void> {
+    try {
+      const fechaHoy = this.supabaseService.getHondurasDateTime();
+      const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fechaHoy);
+      
+      console.log('Cargando números ganadores del día:', fechaStr);
+      
+      const { data: sorteosData, error } = await this.supabaseService.client
+        .from('sorteos')
+        .select('sorteo, numero_ganador')
+        .like('id', `${fechaStr}-%`)
+        .not('numero_ganador', 'is', null);
+
+      if (error) {
+        console.error('Error al cargar números ganadores:', error);
+        return;
+      }
+
+      // Resetear números ganadores
+      this.numerosGanadoresDelDia = { mañana: null, tarde: null, noche: null };
+
+      // Procesar datos de sorteos cerrados
+      if (sorteosData?.length) {
+        sorteosData.forEach((sorteo: any) => {
+          let sorteoKey = sorteo.sorteo?.toLowerCase();
+          // Normalizar "mañana" vs "manana"
+          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          
+          if (['mañana', 'tarde', 'noche'].includes(sorteoKey)) {
+            const key = sorteoKey as 'mañana' | 'tarde' | 'noche';
+            this.numerosGanadoresDelDia[key] = sorteo.numero_ganador ? 
+              parseInt(sorteo.numero_ganador) : null;
+          }
+        });
+      }
+      
+      console.log('Números ganadores del día cargados:', this.numerosGanadoresDelDia);
+    } catch (error) {
+      console.error('Error al cargar números ganadores del día:', error);
+    }
+  }
+
+  // Método para obtener el balance final formateado
+  getBalanceFinal(): number {
+    return this.balanceUnificado?.balance_final || 0;
+  }
+
+  // Método para obtener número ganador o "Pendiente"
+  getNumeroGanadorOPendiente(sorteo: 'mañana' | 'tarde' | 'noche'): string {
+    const numero = this.numerosGanadoresDelDia[sorteo];
+    return numero !== null ? numero.toString().padStart(2, '0') : 'Pendiente';
+  }
+
+  // Método para verificar si un sorteo tiene número ganador
+  tieneNumeroGanador(sorteo: 'mañana' | 'tarde' | 'noche'): boolean {
+    return this.numerosGanadoresDelDia[sorteo] !== null;
   }
 }

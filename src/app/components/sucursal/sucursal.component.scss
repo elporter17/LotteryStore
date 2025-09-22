@@ -1350,6 +1350,164 @@
   font-style: italic;
 }
 
+/* ESTILOS PARA VISTA UNIFICADA */
+.unified-summary-section {
+  margin: 20px 25px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.balance-final-card {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border-radius: 12px;
+  padding: 25px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+  transition: all 0.3s ease;
+}
+
+.balance-final-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+}
+
+.balance-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.balance-header i {
+  font-size: 20px;
+}
+
+.balance-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.balance-amount {
+  font-size: 42px;
+  font-weight: 800;
+  font-family: 'Courier New', monospace;
+  margin: 15px 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.balance-description {
+  font-size: 14px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.winning-numbers-section {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f8f9fa;
+}
+
+.section-header i {
+  font-size: 20px;
+  color: #ffc107;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.winning-numbers-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.winner-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #dee2e6;
+  transition: all 0.2s ease;
+}
+
+.winner-row:hover {
+  background: #e9ecef;
+  transform: translateX(5px);
+}
+
+.sorteo-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sorteo-info i {
+  font-size: 16px;
+  color: #6c757d;
+}
+
+.sorteo-name {
+  font-weight: 600;
+  color: #495057;
+  font-size: 16px;
+}
+
+.winner-number {
+  font-size: 24px;
+  font-weight: 800;
+  font-family: 'Courier New', monospace;
+  background: #28a745;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 8px;
+  min-width: 60px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+  transition: all 0.2s ease;
+}
+
+.winner-number.pending {
+  background: #6c757d;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  box-shadow: 0 2px 4px rgba(108, 117, 125, 0.3);
+}
+
+.winner-number:not(.pending) {
+  animation: numberGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes numberGlow {
+  from {
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+  }
+  to {
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.6);
+  }
+}
+
 .no-data p {
   margin: 0;
   font-size: 14px;
@@ -1567,5 +1725,48 @@
     margin: 0 -10px;
     padding-left: 10px;
     padding-right: 10px;
+  }
+
+  /* RESPONSIVO PARA VISTA UNIFICADA */
+  .unified-summary-section {
+    margin: 15px;
+    gap: 15px;
+  }
+
+  .balance-final-card {
+    padding: 20px;
+  }
+
+  .balance-amount {
+    font-size: 32px;
+  }
+
+  .winning-numbers-section {
+    padding: 20px;
+  }
+
+  .winner-row {
+    padding: 12px 15px;
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .winner-row:hover {
+    transform: none;
+  }
+
+  .sorteo-info {
+    justify-content: center;
+  }
+
+  .winner-number {
+    font-size: 20px;
+    padding: 6px 12px;
+  }
+
+  .winner-number.pending {
+    font-size: 12px;
+    padding: 8px 12px;
   }
 }
