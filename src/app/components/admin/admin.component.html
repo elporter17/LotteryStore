@@ -292,12 +292,12 @@
               <div *ngIf="!isSorteoOpen(sorteo)" class="winner-form">
                 <div class="form-group">
                   <label>Número Ganador:</label>
-                  <input type="number" class="form-input" min="1" max="99" 
+                  <input type="text" class="form-input" maxlength="2" pattern="[0-9]{1,2}" 
                          [(ngModel)]="winningNumbers[sorteo.name]" 
                          [disabled]="isLoading"
-                         placeholder="Ingrese número (1-99)">
+                         placeholder="Ingrese número (00-99)">
                 </div>
-                <button class="btn-set-winner" (click)="openFactorsModal(sorteo.name, +winningNumbers[sorteo.name])" 
+                <button class="btn-set-winner" (click)="openFactorsModal(sorteo.name, winningNumbers[sorteo.name] === '00' ? 0 : +winningNumbers[sorteo.name])" 
                         [disabled]="!winningNumbers[sorteo.name] || isLoading">
                   <i class="fas fa-cog"></i> 
                   <span *ngIf="isLoading">Cargando...</span>

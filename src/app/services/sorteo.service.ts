@@ -14,12 +14,12 @@ export class SorteoService {
 
   private async loadSorteoSchedules(): Promise<void> {
     try {
-      console.log('🔄 Cargando horarios desde la base de datos...');
+      // console.log('🔄 Cargando horarios desde la base de datos...');
       
       // Cargar horarios desde la base de datos
       this.sorteoSchedules = await this.supabaseService.getSorteoSchedules();
       
-      console.log('✅ Horarios cargados correctamente desde BD:', this.sorteoSchedules);
+      // console.log('✅ Horarios cargados correctamente desde BD:', this.sorteoSchedules);
       
     } catch (error) {
       console.error('❌ Error cargando horarios desde BD:', error);
@@ -46,8 +46,8 @@ export class SorteoService {
     const currentMinute = hondurasTime.getMinutes();
     const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-    console.log(`🕐 Hora actual Honduras: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')} (${currentTimeInMinutes} minutos)`);
-    console.log('📋 Horarios disponibles:', this.sorteoSchedules);
+    // console.log(`🕐 Hora actual Honduras: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')} (${currentTimeInMinutes} minutos)`);
+    // console.log('📋 Horarios disponibles:', this.sorteoSchedules);
 
     // Buscar el sorteo que está actualmente abierto (currentTime >= openTime && currentTime < closeTime)
     for (const sorteo of this.sorteoSchedules) {
@@ -62,14 +62,14 @@ export class SorteoService {
       const openTimeInMinutes = openHour * 60 + openMinute;
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
 
-      console.log(`🎯 Sorteo ${sorteo.name}: abre a las ${sorteo.openTime} (${openTimeInMinutes} min) - cierra a las ${sorteo.closeTime} (${closeTimeInMinutes} min)`);
+      // console.log(`🎯 Sorteo ${sorteo.name}: abre a las ${sorteo.openTime} (${openTimeInMinutes} min) - cierra a las ${sorteo.closeTime} (${closeTimeInMinutes} min)`);
       
       // Verificar si estamos dentro del rango del sorteo
       const isInRange = currentTimeInMinutes >= openTimeInMinutes && currentTimeInMinutes < closeTimeInMinutes;
-      console.log(`⏰ ¿${currentTimeInMinutes} >= ${openTimeInMinutes} && ${currentTimeInMinutes} < ${closeTimeInMinutes}? ${isInRange}`);
+      // console.log(`⏰ ¿${currentTimeInMinutes} >= ${openTimeInMinutes} && ${currentTimeInMinutes} < ${closeTimeInMinutes}? ${isInRange}`);
 
       if (isInRange) {
-        console.log(`✅ Sorteo actual seleccionado: ${sorteo.name} (${sorteo.label})`);
+        // console.log(`✅ Sorteo actual seleccionado: ${sorteo.name} (${sorteo.label})`);
         return sorteo;
       }
     }

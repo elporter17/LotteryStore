@@ -96,7 +96,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     this.userSubscription = this.supabaseService.currentUser$.subscribe(user => {
       this.currentUser = user;
-      console.log('Usuario actual - Sucursal:', this.currentUser?.sucursal);
+    //  console.log('Usuario actual - Sucursal:', this.currentUser?.sucursal);
       if (!user || user.role !== 'sucursal') {
         this.router.navigate(['/login']);
       }
@@ -231,7 +231,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
   async updateSorteoInfo(): Promise<void> {
     try {
-      console.log('🔄 Actualizando información del sorteo...');
+      //console.log('🔄 Actualizando información del sorteo...');
 
       // Asegurar que tenemos los horarios más recientes
       await this.sorteoService.refreshSorteoSchedules();
@@ -239,19 +239,19 @@ export class SucursalComponent implements OnInit, OnDestroy {
       const previousSorteo = this.currentSorteo?.name;
       this.currentSorteo = this.sorteoService.getCurrentSorteo();
       
-      console.log(`📝 Sorteo anterior: ${previousSorteo}`);
-      console.log(`🎯 Sorteo actual: ${this.currentSorteo?.name}`);
+      // console.log(`📝 Sorteo anterior: ${previousSorteo}`);
+      // console.log(`🎯 Sorteo actual: ${this.currentSorteo?.name}`);
 
       if (this.currentSorteo) {
         this.isSorteoOpen = this.sorteoService.isSorteoOpen(this.currentSorteo);
         this.timeUntilClose = this.sorteoService.getTimeUntilClose(this.currentSorteo);
         
-        console.log(`✅ Sorteo ${this.currentSorteo.name} - Estado: ${this.isSorteoOpen ? 'ABIERTO' : 'CERRADO'}`);
-        console.log(`⏰ Tiempo hasta cierre: ${this.timeUntilClose}`);
+        // console.log(`✅ Sorteo ${this.currentSorteo.name} - Estado: ${this.isSorteoOpen ? 'ABIERTO' : 'CERRADO'}`);
+        // console.log(`⏰ Tiempo hasta cierre: ${this.timeUntilClose}`);
       } else {
         this.isSorteoOpen = false;
         this.timeUntilClose = '';
-        console.log('❌ No hay sorteo activo disponible');
+        // console.log('❌ No hay sorteo activo disponible');
       }
     } catch (error) {
       console.error('❌ Error actualizando información del sorteo:', error);
@@ -304,7 +304,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
     const sucursalCode = sucursal.replace(/\s+/g, '').toUpperCase().substring(0, 3);
     const correlativoFormatted = correlativo.toString().padStart(4, '0');
 
-    console.log('Sucursal:', `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`);
+    // console.log('Sucursal:', `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`);
     return `${sucursalCode}-REC-${year}${month}${day}-${correlativoFormatted}`;
   }
 
@@ -338,7 +338,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     try {
       // PASO 1: Refrescar información del sorteo actual antes de crear la venta
-      console.log('🔄 Actualizando información del sorteo antes de crear venta...');
+      // console.log('🔄 Actualizando información del sorteo antes de crear venta...');
       await this.updateSorteoInfo();
       
       // PASO 2: Verificar que tenemos un sorteo válido
@@ -350,8 +350,8 @@ export class SucursalComponent implements OnInit, OnDestroy {
         return;
       }
       
-      console.log(`✅ Sorteo activo confirmado: ${this.currentSorteo.name} (${this.currentSorteo.label})`);
-      console.log(`🕐 Estado del sorteo: ${this.isSorteoOpen ? 'ABIERTO' : 'CERRADO'}`);
+      // console.log(`✅ Sorteo activo confirmado: ${this.currentSorteo.name} (${this.currentSorteo.label})`);
+      // console.log(`🕐 Estado del sorteo: ${this.isSorteoOpen ? 'ABIERTO' : 'CERRADO'}`);
 
       // Obtener el siguiente correlativo para esta sucursal
       const correlativo = await this.supabaseService.getNextCorrelativo(this.currentUser.sucursal);
@@ -369,8 +369,8 @@ export class SucursalComponent implements OnInit, OnDestroy {
         correlativo: correlativo
       };
       
-      console.log(`💾 Creando venta para sorteo: "${sale.sorteo}"`);
-      console.log('📊 Datos de la venta:', sale);
+      // console.log(`💾 Creando venta para sorteo: "${sale.sorteo}"`);
+      // console.log('📊 Datos de la venta:', sale);
 
 
       const saleId = await this.supabaseService.createSale(sale);
@@ -679,7 +679,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
     for (const sorteo of sorteos) {
       // Validar que los tiempos existan antes de hacer split
       if (!sorteo.openTime || !sorteo.closeTime) {
-        console.warn('Sorteo con tiempos inválidos:', sorteo);
+        //console.warn('Sorteo con tiempos inválidos:', sorteo);
         continue;
       }
 
@@ -757,7 +757,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     // Validar que closeTime exista antes de hacer split
     if (!activeSorteo.closeTime) {
-      console.warn('Sorteo activo sin closeTime:', activeSorteo);
+      // console.warn('Sorteo activo sin closeTime:', activeSorteo);
       this.isBlocked = false;
       return;
     }
@@ -813,7 +813,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
     for (const sorteo of sorteos) {
       // Validar que openTime exista antes de hacer split
       if (!sorteo.openTime) {
-        console.warn('Sorteo sin openTime:', sorteo);
+        // console.warn('Sorteo sin openTime:', sorteo);
         continue;
       }
 
@@ -832,7 +832,7 @@ export class SucursalComponent implements OnInit, OnDestroy {
   // Método para calcular el tiempo hasta la próxima apertura
   private calculateTimeUntilOpening(currentTotalMinutes: number, nextSorteo: any): string {
     if (!nextSorteo || !nextSorteo.openTime) {
-      console.warn('nextSorteo inválido o sin openTime:', nextSorteo);
+      // console.warn('nextSorteo inválido o sin openTime:', nextSorteo);
       return '';
     }
 
@@ -935,7 +935,7 @@ Revisa la consola para más detalles.`);
 
   async loadAllSorteoData(): Promise<void> {
     try {
-      console.log('Cargando datos de sorteos de forma optimizada...');
+      // console.log('Cargando datos de sorteos de forma optimizada...');
       // Construir un Date a partir de filterDate (ej. "2025-07-24")
       const fecha = new Date(this.filterDate + 'T00:00:00');
       const sucursal = this.currentUser?.sucursal || 'Sucursal 1';
@@ -956,7 +956,7 @@ Revisa la consola para más detalles.`);
 
       // Determinar y mostrar el tab activo
       this.activeTab = this.getCurrentSorteoTab();
-      console.log('Datos de sorteos cargados:', this.sorteoData);
+      // console.log('Datos de sorteos cargados:', this.sorteoData);
       this.cdr.detectChanges();
     } catch (error) {
       console.error('Error cargando datos de sorteos:', error);
@@ -968,7 +968,7 @@ Revisa la consola para más detalles.`);
 
   private async loadSorteoDataOptimized2(fecha: Date, sucursal: string): Promise<void> {
     try {
-      console.log('Cargando datos de sorteos optimizados para fecha:', fecha, 'y sucursal:', sucursal);
+      // console.log('Cargando datos de sorteos optimizados para fecha:', fecha, 'y sucursal:', sucursal);
       // Determinar rango completo del día
       const startOfDay = new Date(fecha);
       startOfDay.setHours(0, 0, 0, 0);
@@ -978,7 +978,7 @@ Revisa la consola para más detalles.`);
       // Formatear fechas para Supabase
       const startStr = this.supabaseService.formatLocalDateForSupabase(startOfDay);
       const endStr = this.supabaseService.formatLocalDateForSupabase(endOfDay);
-      console.log('Rango formateado para consulta:', startStr, '->', endStr);
+      // console.log('Rango formateado para consulta:', startStr, '->', endStr);
 
       // Consulta optimizada que obtiene todos los datos del día en una sola petición
       const { data, error } = await this.supabaseService.client
@@ -990,14 +990,14 @@ Revisa la consola para más detalles.`);
         .eq('sucursal', sucursal)
         .gte('fecha', startStr)
         .lte('fecha', endStr);
-      console.log('Consulta optimizada ejecutada:', { data, error });
+      // console.log('Consulta optimizada ejecutada:', { data, error });
 
       if (error) {
         console.error('Error en consulta optimizada:', error);
         return;
       }
 
-      console.log('Datos obtenidos de consulta optimizada:', data);
+      // console.log('Datos obtenidos de consulta optimizada:', data);
 
       // Procesar los datos agregándolos por sorteo
       if (data?.length) {
@@ -1031,7 +1031,7 @@ Revisa la consola para más detalles.`);
 
   private async loadSorteoDataOptimized(fecha: Date, sucursal: string): Promise<void> {
     try {
-      console.log('Cargando datos optimizados desde la vista para fecha:', fecha, 'y sucursal:', sucursal);
+      // console.log('Cargando datos optimizados desde la vista para fecha:', fecha, 'y sucursal:', sucursal);
 
       const formattedDate = this.supabaseService.formatLocalDateForSupabase(fecha);
       console.log(sucursal, 'Sucursal para consulta:', sucursal);
@@ -1045,7 +1045,7 @@ Revisa la consola para más detalles.`);
         .eq('fecha', formattedDate)
         .eq('sucursal', sucursal);
 
-      console.log('Consulta a vista ejecutada:', { data, error });
+      // console.log('Consulta a vista ejecutada:', { data, error });
       
       // Si la vista no existe o falla, usar consulta directa
       if (error || !data || data.length === 0) {
@@ -1054,7 +1054,7 @@ Revisa la consola para más detalles.`);
         return;
       }
 
-      console.log('Datos obtenidos desde la vista:', data);
+      // console.log('Datos obtenidos desde la vista:', data);
 
       // Inicializar estructura
       this.sorteoData = {
@@ -1088,7 +1088,7 @@ Revisa la consola para más detalles.`);
   // Método fallback para consulta directa cuando la vista no está disponible
   private async loadSorteoDataDirect(fecha: Date, sucursal: string): Promise<void> {
     try {
-      console.log('Cargando datos con consulta directa para fecha:', fecha, 'y sucursal:', sucursal);
+      // console.log('Cargando datos con consulta directa para fecha:', fecha, 'y sucursal:', sucursal);
       
       const startOfDay = new Date(fecha);
       startOfDay.setHours(0, 0, 0, 0);
@@ -1099,7 +1099,7 @@ Revisa la consola para más detalles.`);
       const endStr = this.supabaseService.formatLocalDateForSupabase(endOfDay);
       const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fecha);
       
-      console.log('Rango de fechas para consulta directa:', startStr, 'a', endStr);
+      // console.log('Rango de fechas para consulta directa:', startStr, 'a', endStr);
 
       // Consulta 1: Obtener ventas del día
       const { data: salesData, error: salesError } = await this.supabaseService.client
@@ -1179,7 +1179,7 @@ Revisa la consola para más detalles.`);
             
             // Asignar número ganador
             this.sorteoData[sorteoKey].numero_ganador = sorteo.numero_ganador ? 
-              parseInt(sorteo.numero_ganador) : null;
+              sorteo.numero_ganador : null;
             
             // Calcular total a pagar si hay número ganador
             if (sorteo.numero_ganador) {
@@ -1204,7 +1204,7 @@ Revisa la consola para más detalles.`);
 
   // Determinar el sorteo actual basado en la hora de Honduras y los horarios configurados
   private getCurrentSorteoTab(): 'mañana' | 'tarde' | 'noche' {
-    console.log('Determinando sorteo actual basado en hora de Honduras y horarios configurados...');
+    // console.log('Determinando sorteo actual basado en hora de Honduras y horarios configurados...');
 
     // Obtener la hora actual de Honduras
     const hondurasNow = this.supabaseService.getHondurasDateTime();
@@ -1216,7 +1216,7 @@ Revisa la consola para más detalles.`);
     const currentMinute = parseInt(minuteStr, 10);
     const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-    console.log(`Hora actual de Honduras: ${hourStr.padStart(2, '0')}:${minuteStr.padStart(2, '0')}`);
+    // console.log(`Hora actual de Honduras: ${hourStr.padStart(2, '0')}:${minuteStr.padStart(2, '0')}`);
 
     // Obtener todos los sorteos configurados
     const sorteos = this.sorteoService.getAllSorteos();
@@ -1225,7 +1225,7 @@ Revisa la consola para más detalles.`);
     for (const sorteo of sorteos) {
       // Validar que los tiempos existan antes de hacer split
       if (!sorteo.openTime || !sorteo.closeTime) {
-        console.warn('Sorteo con tiempos inválidos en getCurrentSorteoTab:', sorteo);
+        // console.warn('Sorteo con tiempos inválidos en getCurrentSorteoTab:', sorteo);
         continue;
       }
 
@@ -1235,7 +1235,7 @@ Revisa la consola para más detalles.`);
       const openTimeInMinutes = openHour * 60 + openMinute;
       const closeTimeInMinutes = closeHour * 60 + closeMinute;
 
-      console.log(`Verificando sorteo ${sorteo.name}: ${sorteo.openTime} - ${sorteo.closeTime}`);
+      // console.log(`Verificando sorteo ${sorteo.name}: ${sorteo.openTime} - ${sorteo.closeTime}`);
 
       // Caso especial para sorteo de noche que puede cruzar medianoche
       if (sorteo.name === 'noche') {
@@ -1384,7 +1384,7 @@ Revisa la consola para más detalles.`);
     try {
       const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fecha);
       
-      console.log('Cargando sorteos cerrados para fecha:', fechaStr);
+      // console.log('Cargando sorteos cerrados para fecha:', fechaStr);
       
       const { data: sorteosData, error } = await this.supabaseService.client
         .from('sorteos')
@@ -1469,20 +1469,19 @@ Revisa la consola para más detalles.`);
 
   // ================== MÉTODOS PARA VISTA UNIFICADA ==================
 
-  // Método para obtener el balance final unificado (misma lógica que cierre de caja)
+  // Método para obtener el balance final unificado (calculado desde el último cierre)
   async cargarBalanceUnificado(): Promise<void> {
     try {
       if (!this.currentUser?.sucursal) return;
       
-      console.log('Cargando balance unificado para sucursal:', this.currentUser.sucursal);
+      console.log('Cargando balance unificado desde último cierre para sucursal:', this.currentUser.sucursal);
       
-      // Usar el mismo método que usa cierre de caja: calcularResumenCajaDiario
-      this.balanceUnificado = await this.supabaseService.calcularResumenCajaDiario(
-        new Date(),
+      // Usar el nuevo método que calcula desde el último cierre automáticamente
+      this.balanceUnificado = await this.supabaseService.calcularResumenCajaDesdeUltimoCierre(
         this.currentUser.sucursal
       );
       
-      console.log('Balance unificado cargado:', this.balanceUnificado);
+      console.log('Balance unificado desde último cierre cargado:', this.balanceUnificado);
     } catch (error) {
       console.error('Error al cargar balance unificado:', error);
       this.balanceUnificado = {
@@ -1502,7 +1501,7 @@ Revisa la consola para más detalles.`);
       const fechaHoy = this.supabaseService.getHondurasDateTime();
       const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fechaHoy);
       
-      console.log('Cargando números ganadores del día:', fechaStr);
+      //console.log('Cargando números ganadores del día:', fechaStr);
       
       const { data: sorteosData, error } = await this.supabaseService.client
         .from('sorteos')
@@ -1533,7 +1532,7 @@ Revisa la consola para más detalles.`);
         });
       }
       
-      console.log('Números ganadores del día cargados:', this.numerosGanadoresDelDia);
+     // console.log('Números ganadores del día cargados:', this.numerosGanadoresDelDia);
     } catch (error) {
       console.error('Error al cargar números ganadores del día:', error);
     }
