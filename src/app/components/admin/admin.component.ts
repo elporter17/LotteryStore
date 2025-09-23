@@ -1442,6 +1442,13 @@ export class AdminComponent implements OnInit {
       // Calcular totales por sucursal
       await this.supabaseService.calcularTotalesSorteoPorSucursal(sorteoId);
 
+      // Registrar automáticamente las salidas de efectivo por pago de sorteo
+      await this.supabaseService.registrarSalidasEfectivoPorSorteo(
+        sorteoId,
+        winningNumber,
+        this.currentUser.id
+      );
+
       // Cerrar modal de factores
       this.closeFactorsModal();
 
@@ -1463,7 +1470,8 @@ export class AdminComponent implements OnInit {
       this.winningNumbers[sorteo.name] = winningNumber;
 
       this.notificationService.showSuccess(
-        `Número ganador ${winningNumber.padStart(2, '0')} establecido con factores específicos por sucursal para ${sorteo.name}`
+        `Número ganador ${winningNumber.padStart(2, '0')} establecido para ${sorteo.name}. ` +
+        `Se han registrado automáticamente las salidas de efectivo por pagos de sorteo.`
       );
 
     } catch (error) {

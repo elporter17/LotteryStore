@@ -2721,6 +2721,82 @@ export class SupabaseService {
     }
   }
 
+  // Método para registrar automáticamente salidas de efectivo por pago de sorteos
+  async registrarSalidasEfectivoPorSorteo(
+    sorteoId: string, 
+    numeroGanador: string, 
+    adminUserId: string
+  ): Promise<void> {
+    try {
+      console.log(`🎯 Registrando salidas de efectivo para sorteo ${sorteoId}, número ganador: ${numeroGanador}`);
+      
+      // Obtener resumen por sucursal para determinar los pagos
+      const resumenSucursales = await this.getSorteoResumenPorSucursal(sorteoId);
+      
+      if (!resumenSucursales || resumenSucursales.length === 0) {
+        console.log(`❌ No se encontró resumen de sucursales para ${sorteoId}`);
+        return;
+      }
+
+      // Filtrar sorteos con pagos y evitar duplicados
+      const sucursalesConPagos = resumenSucursales.filter(resumen => 
+        resumen.total_pagado > 0 && resumen.cantidad_numero_ganador > 0
+      );
+
+      if (sucursalesConPagos.length === 0) {
+        console.log(`✅ No hay sucursales con pagos para el sorteo ${sorteoId}`);
+        return;
+      }
+
+      // Verificar si ya existen salidas registradas para este sorteo para evitar duplicados
+      const { data: movimientosExistentes, error: errorCheck } = await this.supabase
+        .from('movimientos_caja')
+        .select('id, sucursal')
+        .eq('sorteo_id', sorteoId)
+        .eq('tipo', 'salida')
+        .like('motivo', `%pago de sorteo numero ganador ${numeroGanador}%`);
+
+      if (errorCheck) {
+        console.warn('Error al verificar movimientos existentes:', errorCheck);
+      }
+
+      const sucursalesYaRegistradas = new Set(
+        (movimientosExistentes || []).map(m => m.sucursal)
+      );
+
+      // Registrar movimientos de salida para cada sucursal que no esté ya registrada
+      const movimientosPromises = sucursalesConPagos
+        .filter(resumen => !sucursalesYaRegistradas.has(resumen.sucursal))
+        .map(async (resumen) => {
+          const motivo = `Pago de sorteo numero ganador ${numeroGanador} - ${sorteoId}`;
+          
+          const movimiento = {
+            tipo: 'salida' as const,
+            motivo: motivo,
+            monto: resumen.total_pagado,
+            usuarioId: adminUserId,
+            sorteoId: sorteoId,
+            fecha: new Date(),
+            sucursal: resumen.sucursal,
+            nombreReceptor: `Ganador número ${numeroGanador}`
+          };
+
+          console.log(`💰 Registrando salida para ${resumen.sucursal}: L${resumen.total_pagado}`);
+          
+          return this.registrarMovimientoCaja(movimiento);
+        });
+
+      await Promise.all(movimientosPromises);
+
+      const nuevasRegistradas = sucursalesConPagos.length - sucursalesYaRegistradas.size;
+      console.log(`✅ Salidas de efectivo registradas: ${nuevasRegistradas} sucursales, ${sucursalesYaRegistradas.size} ya existían`);
+
+    } catch (error) {
+      console.error('❌ Error al registrar salidas de efectivo por sorteo:', error);
+      throw error;
+    }
+  }
+
 
   // ================== RESUMEN DE CAJA DIARIO ==================
 
