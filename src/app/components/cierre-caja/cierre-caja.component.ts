@@ -352,7 +352,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
                 monto: this.datosConfirmPago.montoExacto,
                 usuarioId: this.currentUser.id,
                 sorteoId: this.sorteoParaPago.sorteoId,
-                fecha: new Date(),
+                fecha: this.supabaseService.getHondurasDateTime(),
                 sucursal: this.selectedSucursalForCierre,
                 nombreReceptor: this.datosConfirmPago.nombreReceptor || undefined
             };
@@ -457,7 +457,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             const movimiento: Partial<MovimientoCaja> = {
                 ...this.nuevoMovimiento,
                 usuarioId: this.currentUser.id,
-                fecha: new Date(),
+                fecha: this.supabaseService.getHondurasDateTime(),
                 sucursal: this.selectedSucursalForCierre
             };
 
@@ -550,7 +550,7 @@ export class CierreCajaComponent implements OnInit, OnDestroy {
             var idsucursal = this.sucursalesInfo.find(user => user.sucursal === this.selectedSucursalForCierre)?.id || '';
             // Usar exactamente los mismos valores del resumen para garantizar consistencia
             const cierre: Partial<CierreDiario> = {
-                fecha: new Date(),
+                fecha: this.supabaseService.getHondurasDateTime(),
                 usuarioId: idsucursal , //d05be528-ce73-49c4-b6fa-785bbdc5cffc
                 sucursal: this.selectedSucursalForCierre,
                 totalVendido: this.resumenCaja.total_vendido,

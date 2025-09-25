@@ -2772,7 +2772,7 @@ export class SupabaseService {
             monto: resumen.total_pagado,
             usuarioId: adminUserId,
             sorteoId: sorteoId,
-            fecha: new Date(),
+            fecha: this.getHondurasDateTime(),
             sucursal: resumen.sucursal,
             nombreReceptor: `Ganador número ${numeroGanador}`
           };
@@ -2796,17 +2796,37 @@ export class SupabaseService {
 
   async obtenerFechaUltimoCierre(sucursal: string): Promise<Date> {
     try {
-      const ultimoCierre = await this.obtenerUltimoCierreDiario(sucursal);
+      console.log('🔍 Obteniendo fecha último cierre para sucursal:', sucursal);
       
-      if (ultimoCierre) {
-        // Si existe un cierre previo, usar esa fecha
-        return ultimoCierre.createdAt;
+      // Consultar directamente la tabla cierres_diarios
+      const { data, error } = await this.supabase
+        .from('cierres_diarios')
+        .select('created_at')
+        .eq('sucursal', sucursal)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No existe ningún cierre para esta sucursal
+          console.log('📅 No hay cierres previos, usando fecha por defecto (2025-09-01)');
+          return new Date('2025-09-01T00:00:00.000Z');
+        }
+        throw error;
+      }
+
+      if (data) {
+        const fechaCierre = new Date(data.created_at);
+        console.log('📅 Fecha último cierre encontrada:', fechaCierre);
+        return fechaCierre;
       } else {
         // Si no hay cierres previos, usar desde el 1 de septiembre 2025
+        console.log('📅 No hay cierres previos, usando fecha por defecto (2025-09-01)');
         return new Date('2025-09-01T00:00:00.000Z');
       }
     } catch (error) {
-      console.error('Error al obtener fecha del último cierre:', error);
+      console.error('❌ Error al obtener fecha del último cierre:', error);
       // En caso de error, usar desde el 1 de septiembre 2025
       return new Date('2025-09-01T00:00:00.000Z');
     }
@@ -2814,24 +2834,33 @@ export class SupabaseService {
 
   async calcularResumenCajaDesdeUltimoCierre(sucursal: string): Promise<any> {
     try {
+      console.log('🔍 Iniciando cálculo de resumen desde último cierre para sucursal:', sucursal);
+      
       // Obtener la fecha del último cierre o desde 1 septiembre 2025
       const fechaDesde = await this.obtenerFechaUltimoCierre(sucursal);
       const fechaHasta = this.getEndOfDayHonduras(new Date()); // Hasta ahora
 
+      console.log('📅 Fecha desde (último cierre):', fechaDesde);
+      console.log('📅 Fecha hasta (ahora):', fechaHasta);
+
       // Formatear fechas para consulta
       const fechaDesdeStr = this.formatLocalDateForSupabase(fechaDesde);
       const fechaHastaStr = this.formatLocalDateForSupabase(fechaHasta);
-
-      // Calcular total vendido desde el último cierre
+ 
+      
+      
       const { data: salesData, error: salesError } = await this.supabase
         .from('sales')
-        .select('total')
+        .select('total, created_at')
         .eq('sucursal', sucursal)
         .gte('created_at', fechaDesdeStr)
         .lte('created_at', fechaHastaStr);
 
-      if (salesError) throw salesError;
-
+      if (salesError) {
+        console.error('❌ Error al consultar ventas:', salesError);
+        throw salesError;
+      }
+ 
       const totalVendido = (salesData || []).reduce((sum, sale) => sum + parseFloat(sale.total), 0);
 
       // Calcular pagos de sorteos desde el último cierre
@@ -2844,8 +2873,12 @@ export class SupabaseService {
         .gte('created_at', fechaDesdeStr)
         .lte('created_at', fechaHastaStr);
 
-      if (pagosSorteosError) throw pagosSorteosError;
+      if (pagosSorteosError) {
+        console.error('❌ Error al consultar pagos:', pagosSorteosError);
+        throw pagosSorteosError;
+      }
 
+      
       const totalPagado = (pagosSorteosData || []).reduce((sum, pago) => sum + parseFloat(pago.monto || '0'), 0);
 
       // Calcular todos los movimientos de caja desde el último cierre
@@ -2856,8 +2889,12 @@ export class SupabaseService {
         .gte('created_at', fechaDesdeStr)
         .lte('created_at', fechaHastaStr);
 
-      if (movimientosError) throw movimientosError;
+      if (movimientosError) {
+        console.error('❌ Error al consultar movimientos:', movimientosError);
+        throw movimientosError;
+      }
 
+       
       let movimientosEntrada = 0;
       let movimientosSalida = 0;
 
@@ -2870,10 +2907,12 @@ export class SupabaseService {
         }
       });
 
+      
       const totalNeto = totalVendido;
       const balanceFinal = totalNeto + movimientosEntrada - movimientosSalida;
 
-      return {
+
+      const resultado = {
         total_vendido: totalVendido,
         total_pagado: totalPagado,
         total_neto: totalNeto,
@@ -2883,9 +2922,12 @@ export class SupabaseService {
         fecha_ultimo_cierre: fechaDesde.toISOString(),
         fecha_hasta: fechaHasta.toISOString()
       };
+
+      return resultado;
+
     } catch (error) {
-      console.error('Error en cálculo desde último cierre:', error);
-      return {
+      console.error('❌ Error en cálculo desde último cierre:', error);
+      const errorResult = {
         total_vendido: 0,
         total_pagado: 0,
         total_neto: 0,
@@ -2895,6 +2937,8 @@ export class SupabaseService {
         fecha_ultimo_cierre: null,
         fecha_hasta: new Date().toISOString()
       };
+      console.log('🔄 Retornando resultado de error:', errorResult);
+      return errorResult;
     }
   }
 

@@ -58,6 +58,11 @@ export class SucursalComponent implements OnInit, OnDestroy {
   activeTab: 'mañana' | 'tarde' | 'noche' = 'mañana';
   sorteoData: { [key: string]: any } = {};
 
+  // Constantes para evitar problemas con caracteres especiales en templates
+  readonly MANANA = 'mañana';
+  readonly TARDE = 'tarde';
+  readonly NOCHE = 'noche';
+
   // Propiedades para vista unificada
   balanceUnificado: any = null;
   numerosGanadoresDelDia: { 
@@ -96,7 +101,8 @@ export class SucursalComponent implements OnInit, OnDestroy {
 
     this.userSubscription = this.supabaseService.currentUser$.subscribe(user => {
       this.currentUser = user;
-    //  console.log('Usuario actual - Sucursal:', this.currentUser?.sucursal);
+      console.log('👤 Usuario actual cargado - Sucursal:', this.currentUser?.sucursal);
+      console.log('👤 Usuario completo:', this.currentUser);
       if (!user || user.role !== 'sucursal') {
         this.router.navigate(['/login']);
       }
@@ -1004,7 +1010,7 @@ Revisa la consola para más detalles.`);
         data.forEach((sale: any) => {
           const clave = sale.sorteo?.toLowerCase() as 'mañana' | 'tarde' | 'noche';
           let mapped: 'mañana' | 'tarde' | 'noche' = clave;
-          if (sale.sorteo?.toLowerCase() === 'mañana' || sale.sorteo?.toLowerCase() === 'manana') {
+          if (sale.sorteo?.toLowerCase() === 'mañana' || sale.sorteo?.toLowerCase() === 'ma�ana') {
             mapped = 'mañana';
           }
 
@@ -1143,8 +1149,8 @@ Revisa la consola para más detalles.`);
         console.log(`Procesando ${salesData.length} ventas...`);
         salesData.forEach((sale: any) => {
           let sorteoKey = sale.sorteo?.toLowerCase();
-          // Normalizar "mañana" vs "manana"
-          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          // Normalizar "mañana" vs "ma�ana"
+          if (sorteoKey === 'ma�ana') sorteoKey = 'mañana';
           
           if (['mañana', 'tarde', 'noche'].includes(sorteoKey) && sale.sale_details) {
             console.log(`Procesando venta de ${sorteoKey}:`, sale);
@@ -1171,8 +1177,8 @@ Revisa la consola para más detalles.`);
         console.log(`Procesando ${sorteosData.length} sorteos cerrados...`);
         sorteosData.forEach((sorteo: any) => {
           let sorteoKey = sorteo.sorteo?.toLowerCase();
-          // Normalizar "mañana" vs "manana"
-          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          // Normalizar "mañana" vs "ma�ana"
+          if (sorteoKey === 'ma�ana') sorteoKey = 'mañana';
           
           if (['mañana', 'tarde', 'noche'].includes(sorteoKey)) {
             console.log(`Procesando sorteo cerrado de ${sorteoKey}:`, sorteo);
@@ -1403,8 +1409,8 @@ Revisa la consola para más detalles.`);
       if (sorteosData?.length) {
         sorteosData.forEach((sorteo: any) => {
           let sorteoKey = sorteo.sorteo?.toLowerCase();
-          // Normalizar "mañana" vs "manana"
-          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          // Normalizar "mañana" vs "ma�ana"
+          if (sorteoKey === 'ma�ana') sorteoKey = 'mañana';
           
           if (['mañana', 'tarde', 'noche'].includes(sorteoKey)) {
             if (!this.sorteoData[sorteoKey]) {
@@ -1472,18 +1478,32 @@ Revisa la consola para más detalles.`);
   // Método para obtener el balance final unificado (calculado desde el último cierre)
   async cargarBalanceUnificado(): Promise<void> {
     try {
-      if (!this.currentUser?.sucursal) return;
+      if (!this.currentUser?.sucursal) {
+        console.warn('⚠️ No hay usuario o sucursal definida para cargar balance');
+        console.log('👤 currentUser completo:', this.currentUser);
+        return;
+      }
       
-      console.log('Cargando balance unificado desde último cierre para sucursal:', this.currentUser.sucursal);
+      console.log('📊 Iniciando carga de balance unificado para sucursal:', this.currentUser.sucursal);
+      console.log('👤 Usuario actual completo:', this.currentUser);
+      console.log('🕐 Timestamp de carga:', new Date().toISOString());
+      console.log('🌍 Hora Honduras:', this.supabaseService.getHondurasDateTime());
       
       // Usar el nuevo método que calcula desde el último cierre automáticamente
       this.balanceUnificado = await this.supabaseService.calcularResumenCajaDesdeUltimoCierre(
         this.currentUser.sucursal
       );
       
-      console.log('Balance unificado desde último cierre cargado:', this.balanceUnificado);
+      console.log('✅ Balance unificado cargado exitosamente:');
+      console.log('💰 Total vendido:', this.balanceUnificado?.total_vendido || 0);
+      console.log('💸 Total pagado:', this.balanceUnificado?.total_pagado || 0);
+      console.log('📈 Balance final:', this.balanceUnificado?.balance_final || 0);
+      console.log('📅 Fecha último cierre:', this.balanceUnificado?.fecha_ultimo_cierre);
+      console.log('📅 Fecha hasta:', this.balanceUnificado?.fecha_hasta);
+      console.log('🔄 Objeto completo:', this.balanceUnificado);
+      
     } catch (error) {
-      console.error('Error al cargar balance unificado:', error);
+      console.error('❌ Error al cargar balance unificado:', error);
       this.balanceUnificado = {
         total_vendido: 0,
         total_pagado: 0,
@@ -1492,16 +1512,18 @@ Revisa la consola para más detalles.`);
         movimientos_salida: 0,
         balance_final: 0
       };
+      console.log('🔄 Balance unificado seteado a valores por defecto debido al error');
     }
   }
 
   // Método para obtener los números ganadores del día actual
   async cargarNumerosGanadoresDelDia(): Promise<void> {
     try {
-      const fechaHoy = this.supabaseService.getHondurasDateTime();
-      const fechaStr = this.supabaseService.formatLocalDateForSupabase_SinHora(fechaHoy);
+      // Usar la fecha filtrada en lugar de la fecha actual
+      const fechaFiltrada = this.filterDate || this.supabaseService.formatLocalDateForSupabase_SinHora(this.supabaseService.getHondurasDateTime());
+      const fechaStr = fechaFiltrada.split(' ')[0]; // Obtener solo la parte de fecha
       
-      //console.log('Cargando números ganadores del día:', fechaStr);
+      console.log('🗓️ Cargando números ganadores para fecha:', fechaStr);
       
       const { data: sorteosData, error } = await this.supabaseService.client
         .from('sorteos')
@@ -1519,10 +1541,11 @@ Revisa la consola para más detalles.`);
 
       // Procesar datos de sorteos cerrados
       if (sorteosData?.length) {
+        console.log('📊 Sorteos encontrados:', sorteosData);
         sorteosData.forEach((sorteo: any) => {
           let sorteoKey = sorteo.sorteo?.toLowerCase();
-          // Normalizar "mañana" vs "manana"
-          if (sorteoKey === 'manana') sorteoKey = 'mañana';
+          // Normalizar "mañana" vs "ma�ana"
+          if (sorteoKey === 'ma�ana') sorteoKey = 'mañana';
           
           if (['mañana', 'tarde', 'noche'].includes(sorteoKey)) {
             const key = sorteoKey as 'mañana' | 'tarde' | 'noche';
@@ -1532,7 +1555,7 @@ Revisa la consola para más detalles.`);
         });
       }
       
-     // console.log('Números ganadores del día cargados:', this.numerosGanadoresDelDia);
+      console.log('🎯 Números ganadores del día cargados:', this.numerosGanadoresDelDia);
     } catch (error) {
       console.error('Error al cargar números ganadores del día:', error);
     }
@@ -1540,7 +1563,42 @@ Revisa la consola para más detalles.`);
 
   // Método para obtener el balance final formateado
   getBalanceFinal(): number {
-    return this.balanceUnificado?.balance_final || 0;
+    const balance = this.balanceUnificado?.balance_final || 0;
+    // console.log('🏦 getBalanceFinal() llamado, retornando:', balance);
+    // console.log('📊 Estado actual del balanceUnificado:', this.balanceUnificado);
+    return balance;
+  }
+
+  // Método público para forzar actualización del balance (para debugging)
+  async forzarActualizacionBalance(): Promise<void> {
+    console.log('🔄 Forzando actualización manual del balance...');
+    
+    // Primero hacer una consulta directa de prueba
+    if (this.currentUser?.sucursal) {
+      console.log('🧪 PRUEBA DIRECTA: Consultando ventas de hoy para', this.currentUser.sucursal);
+      try {
+        const { data: ventasHoy, error } = await this.supabaseService.client
+          .from('sales')
+          .select('total, created_at, sorteo')
+          .eq('sucursal', this.currentUser.sucursal)
+          .gte('created_at', '2025-09-23T00:00:00.000Z')
+          .lte('created_at', '2025-09-23T23:59:59.999Z');
+        
+        if (error) {
+          console.error('❌ Error en prueba directa:', error);
+        } else {
+          console.log('✅ PRUEBA DIRECTA - Ventas encontradas:', ventasHoy?.length || 0);
+          console.log('💰 PRUEBA DIRECTA - Total:', (ventasHoy || []).reduce((sum, v) => sum + parseFloat(v.total), 0));
+          console.log('📊 PRUEBA DIRECTA - Datos:', ventasHoy);
+        }
+      } catch (err) {
+        console.error('❌ Error en consulta directa:', err);
+      }
+    }
+    
+    await this.cargarBalanceUnificado();
+    this.cdr.detectChanges();
+    console.log('✅ Actualización manual completada');
   }
 
   // Método para obtener número ganador o "Pendiente"
